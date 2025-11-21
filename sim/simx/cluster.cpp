@@ -145,6 +145,25 @@ void Cluster::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
     }
 }
 
+void Cluster::dcr_write(uint32_t addr, uint32_t value) {
+  // Route DMA DCR to all sockets
+  if (addr >= 0x006 && addr <= 0x00D) {  // DMA DCR range
+    for (auto& socket : sockets_) {
+      socket->dcr_write(addr, value);
+    }
+  }
+}
+
+uint32_t Cluster::dcr_read(uint32_t addr) const {
+  // Read from first socket (all sockets should have same DMA state)
+  if (addr >= 0x006 && addr <= 0x00E) {  // DMA DCR range
+    if (!sockets_.empty()) {
+      return sockets_[0]->dcr_read(addr);
+    }
+  }
+  return 0;
+}
+
 Cluster::PerfStats Cluster::perf_stats() const {
   PerfStats perf_stats;
   perf_stats.l2cache = l2cache_->perf_stats();

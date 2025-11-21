@@ -146,6 +146,21 @@ void ProcessorImpl::reset() {
 }
 
 void ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
+  // Handle base DCRs
+  if (addr >= VX_DCR_BASE_STATE_BEGIN && addr < VX_DCR_BASE_STATE_END) {
+    dcrs_.write(addr, value);
+    return;
+  }
+
+  // Route DMA DCR to all clusters
+  if (addr >= 0x006 && addr <= 0x00D) {  // DMA DCR range
+    for (auto& cluster : clusters_) {
+      cluster->dcr_write(addr, value);
+    }
+    return;
+  }
+
+  // Unknown DCR
   dcrs_.write(addr, value);
 }
 

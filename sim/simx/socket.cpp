@@ -13,8 +13,20 @@
 
 #include "socket.h"
 #include "cluster.h"
+#include <VX_config.h>
 
 using namespace vortex;
+
+// DMA DCR 地址定义
+#define VX_DCR_DMA_SRC_ADDR0     0x006
+#define VX_DCR_DMA_SRC_ADDR1     0x007
+#define VX_DCR_DMA_DST_ADDR0     0x008
+#define VX_DCR_DMA_DST_ADDR1     0x009
+#define VX_DCR_DMA_SIZE0         0x00A
+#define VX_DCR_DMA_SIZE1         0x00B
+#define VX_DCR_DMA_CORE_ID       0x00C
+#define VX_DCR_DMA_CTRL          0x00D
+#define VX_DCR_DMA_STATUS        0x00E
 
 Socket::Socket(const SimContext& ctx,
                 uint32_t socket_id,
@@ -65,13 +77,25 @@ Socket::Socket(const SimContext& ctx,
     2,                      // pipeline latency
   });
 
+  // Create DMA Engine
+  snprintf(sname, 100, "%s-dma", this->name().c_str());
+  dma_engine_ = DmaEngine::Create(sname, DmaEngine::Config{
+    socket_id,
+    static_cast<uint32_t>(cores_.size()),
+    4,   // max_outstanding_reads
+    4,   // max_outstanding_writes
+    64   // transfer_size (cache line)
+  });
+  dma_engine_->set_socket(this);
+
   // find overlap
   uint32_t overlap = MIN(ICACHE_MEM_PORTS, L1_MEM_PORTS);
 
-  // connect l1 caches to outgoing memory interfaces
+  // connect l1 caches and DMA to outgoing memory interfaces
   for (uint32_t i = 0; i < L1_MEM_PORTS; ++i) {
     snprintf(sname, 100, "%s-l1_arb%d", this->name().c_str(), i);
-    auto l1_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, 2 * overlap, overlap);
+    // Extend arbiter to include DMA (3 inputs instead of 2)
+    auto l1_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, 2 * overlap + 1, overlap);
 
     if (i < overlap) {
       icaches_->MemReqPorts.at(i).bind(&l1_arb->ReqIn.at(i));
@@ -79,6 +103,12 @@ Socket::Socket(const SimContext& ctx,
 
       dcaches_->MemReqPorts.at(i).bind(&l1_arb->ReqIn.at(overlap + i));
       l1_arb->RspIn.at(overlap + i).bind(&dcaches_->MemRspPorts.at(i));
+
+      // Connect DMA to the first arbiter only
+      if (i == 0) {
+        dma_engine_->mem_req_port.bind(&l1_arb->ReqIn.at(2 * overlap));
+        l1_arb->RspIn.at(2 * overlap).bind(&dma_engine_->mem_rsp_port);
+      }
 
       l1_arb->ReqOut.at(i).bind(&this->mem_req_ports.at(i));
       this->mem_rsp_ports.at(i).bind(&l1_arb->RspOut.at(i));
@@ -118,11 +148,15 @@ Socket::~Socket() {
 }
 
 void Socket::reset() {
-  //--
+  if (dma_engine_) {
+    dma_engine_->reset();
+  }
 }
 
 void Socket::tick() {
-  //--
+  if (dma_engine_) {
+    dma_engine_->tick();
+  }
 }
 
 void Socket::attach_ram(RAM* ram) {
@@ -163,9 +197,56 @@ void Socket::resume(uint32_t core_index) {
   cores_.at(core_index)->resume(-1);
 }
 
+void Socket::dcr_write(uint32_t addr, uint32_t value) {
+  // Check if this is a DMA DCR
+  if (addr >= VX_DCR_DMA_SRC_ADDR0 && addr <= VX_DCR_DMA_CTRL) {
+    if (dma_engine_) {
+      // Special handling for CORE_ID: convert to socket-local index
+      if (addr == VX_DCR_DMA_CORE_ID) {
+        uint32_t global_core_id = value;
+        uint32_t cores_per_socket = cores_.size();
+        uint32_t target_socket = global_core_id / cores_per_socket;
+        
+        // Only the target socket processes this DCR
+        if (target_socket == socket_id_) {
+          uint32_t local_core_id = global_core_id % cores_per_socket;
+          dma_engine_->dcr_write(addr, local_core_id);
+          
+          // Dynamically bind DMA to target core's LocalMem
+          if (local_core_id < cores_.size()) {
+            auto core = cores_[local_core_id].get();
+            auto lmem = core->local_mem();
+            
+            // Use the last LocalMem port for DMA
+            uint32_t dma_channel = LSU_CHANNELS - 1;
+            dma_engine_->lmem_req_port.bind(&lmem->Inputs.at(dma_channel));
+            lmem->Outputs.at(dma_channel).bind(&dma_engine_->lmem_rsp_port);
+            
+            DT(3, this->name() << ": DMA bound to core " << local_core_id);
+          }
+        }
+      } else {
+        dma_engine_->dcr_write(addr, value);
+      }
+    }
+  }
+}
+
+uint32_t Socket::dcr_read(uint32_t addr) const {
+  if (addr >= VX_DCR_DMA_SRC_ADDR0 && addr <= VX_DCR_DMA_STATUS) {
+    if (dma_engine_) {
+      return dma_engine_->dcr_read(addr);
+    }
+  }
+  return 0;
+}
+
 Socket::PerfStats Socket::perf_stats() const {
   PerfStats perf_stats;
   perf_stats.icache = icaches_->perf_stats();
   perf_stats.dcache = dcaches_->perf_stats();
+  if (dma_engine_) {
+    perf_stats.dma = dma_engine_->perf_stats();
+  }
   return perf_stats;
 }
