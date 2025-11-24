@@ -51,10 +51,6 @@ public:
     return processor_;
   }
 
-  // DCR interface
-  void dcr_write(uint32_t addr, uint32_t value);
-  uint32_t dcr_read(uint32_t addr) const;
-
   void reset();
 
   void tick();

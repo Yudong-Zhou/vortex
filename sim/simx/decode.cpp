@@ -473,6 +473,18 @@ static op_string_t op_string(const Instr &instr) {
       return op_string(tcu_type, tpuArgs);
     }
   #endif // EXT_TCU_ENABLE
+    ,[&](DmaType dma_type)-> op_string_t {
+      auto dmaArgs = std::get<IntrDmaArgs>(instrArgs);
+      switch (dma_type) {
+      case DmaType::TRANSFER: {
+        uint64_t size = dmaArgs.size_dir & 0x7FFFFFFF;
+        int direction = (dmaArgs.size_dir >> 31) & 0x1;
+        return {"DMA", "size=" + std::to_string(size) + ", dir=" + std::to_string(direction)};
+      }
+      default:
+        std::abort();
+      }
+    }
  );
  return {"", ""};
 }
@@ -1118,6 +1130,20 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       }
     } break;
   #endif
+    case 3: { // DMA
+      switch (funct3) {
+      case 0: { // VX_DMA
+        auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
+        instr->setOpType(DmaType::TRANSFER);
+        instr->setArgs(IntrDmaArgs{static_cast<uint64_t>(rs2)});
+        instr->setSrcReg(0, rd, RegType::Integer);  // rd contains dst address
+        instr->setSrcReg(1, rs1, RegType::Integer); // rs1 contains src address
+        ibuffer.push_back(instr);
+      } break;
+      default:
+        std::abort();
+      }
+    } break;
     default:
       std::abort();
     }

@@ -1,0 +1,4 @@
+main.o: \
+ /mnt/f/UCLA/UCLA-2025-Fall/GPU/vortex_dma/tests/regression/dma/main.cpp \
+ /mnt/f/UCLA/UCLA-2025-Fall/GPU/vortex_dma/runtime/include/vortex.h \
+ /mnt/f/UCLA/UCLA-2025-Fall/GPU/vortex_dma/tests/regression/dma/common.h

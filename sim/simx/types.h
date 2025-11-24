@@ -661,6 +661,26 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// DMA types
+enum class DmaType {
+  TRANSFER,  // DMA transfer operation
+};
+
+struct IntrDmaArgs {
+  uint64_t size_dir; // size and direction (bit 31 for direction)
+};
+
+inline std::ostream &operator<<(std::ostream &os, const DmaType& type) {
+  switch (type) {
+  case DmaType::TRANSFER: os << "TRANSFER"; break;
+  default:
+    assert(false);
+  }
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 using OpType = std::variant<
   AluType
 , BrType
@@ -680,6 +700,7 @@ using OpType = std::variant<
 #ifdef EXT_TCU_ENABLE
 , TcuType
 #endif
+, DmaType
 >;
 
 using IntrArgs = std::variant<
@@ -699,6 +720,7 @@ using IntrArgs = std::variant<
 #ifdef EXT_TCU_ENABLE
 , IntrTcuArgs
 #endif
+, IntrDmaArgs
 >;
 
 ///////////////////////////////////////////////////////////////////////////////

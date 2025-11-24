@@ -25,30 +25,7 @@
 `define VX_DCR_BASE_STARTUP_ARG0        12'h003
 `define VX_DCR_BASE_STARTUP_ARG1        12'h004
 `define VX_DCR_BASE_MPM_CLASS           12'h005
-
-// DMA DCR registers
-`define VX_DCR_DMA_SRC_ADDR0            12'h006
-`define VX_DCR_DMA_SRC_ADDR1            12'h007
-`define VX_DCR_DMA_DST_ADDR0            12'h008
-`define VX_DCR_DMA_DST_ADDR1            12'h009
-`define VX_DCR_DMA_SIZE0                12'h00A
-`define VX_DCR_DMA_SIZE1                12'h00B
-`define VX_DCR_DMA_CORE_ID              12'h00C
-`define VX_DCR_DMA_CTRL                 12'h00D
-`define VX_DCR_DMA_STATUS               12'h00E
-
-`define VX_DCR_BASE_STATE_END           12'h00F
-
-// DMA control register bits
-`define DMA_CTRL_START                  0
-`define DMA_CTRL_DIR                    1
-`define DMA_CTRL_IRQ_EN                 2
-
-// DMA status register bits
-`define DMA_STATUS_IDLE                 0
-`define DMA_STATUS_BUSY                 1
-`define DMA_STATUS_DONE                 2
-`define DMA_STATUS_ERROR                3
+`define VX_DCR_BASE_STATE_END           12'h006
 
 `define VX_DCR_BASE_STATE(addr)         ((addr) - `VX_DCR_BASE_STATE_BEGIN)
 `define VX_DCR_BASE_STATE_COUNT         (`VX_DCR_BASE_STATE_END-`VX_DCR_BASE_STATE_BEGIN)

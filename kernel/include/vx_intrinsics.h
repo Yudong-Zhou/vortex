@@ -281,6 +281,34 @@ inline __attribute__((const)) int vx_shfl_idx(size_t value, int bval, int cval, 
     return ret;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// DMA Transfer Instructions
+///////////////////////////////////////////////////////////////////////////////
+
+// DMA transfer directions
+#define DMA_DIR_G2L 0  // Global to Local Memory
+#define DMA_DIR_L2G 1  // Local to Global Memory
+
+// DMA transfer (generic)
+inline void vx_dma_transfer(void* dst, void* src, size_t size, int direction) {
+    __asm__ volatile (
+        ".insn r 0x0B, 0x0, 0x3, %0, %1, %2"
+        : 
+        : "r"(dst), "r"(src), "r"(size | ((size_t)direction << 31))
+        : "memory"
+    );
+}
+
+// DMA Global to Local
+inline void vx_dma_g2l(void* local_dst, void* global_src, size_t size) {
+    vx_dma_transfer(local_dst, global_src, size, DMA_DIR_G2L);
+}
+
+// DMA Local to Global
+inline void vx_dma_l2g(void* global_dst, void* local_src, size_t size) {
+    vx_dma_transfer(global_dst, local_src, size, DMA_DIR_L2G);
+}
+
 #ifdef __cplusplus
 }
 #endif

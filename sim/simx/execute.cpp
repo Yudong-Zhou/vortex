@@ -25,6 +25,7 @@
 #include "emulator.h"
 #include "instr.h"
 #include "core.h"
+#include "socket.h"
 #include "types.h"
 #ifdef EXT_V_ENABLE
 #include "processor_impl.h"
@@ -1466,6 +1467,26 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       }
     }
   #endif // EXT_TCU_ENABLE
+    ,[&](DmaType dma_type) {
+      auto dmaArgs = std::get<IntrDmaArgs>(instrArgs);
+      switch (dma_type) {
+      case DmaType::TRANSFER: {
+        uint64_t size_dir = dmaArgs.size_dir;
+        uint64_t size = size_dir & 0x7FFFFFFF; // Lower 31 bits for size
+        int direction = (size_dir >> 31) & 0x1; // Bit 31 for direction
+
+        // Get addresses from source registers
+        // rs1_data[0] = rd (dst address), rs1_data[1] = rs1 (src address)
+        uint64_t dst_addr = rs1_data[thread_start].u;
+        uint64_t src_addr = rs2_data[thread_start].u;
+
+        // Trigger DMA transfer through Socket's public interface
+        core_->socket()->trigger_dma_transfer(dst_addr, src_addr, size, direction);
+      } break;
+      default:
+        std::abort();
+      }
+    }
   );
 
   if (rd_write) {

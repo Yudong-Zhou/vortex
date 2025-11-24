@@ -19,8 +19,8 @@
 #include "cache_cluster.h"
 #include "local_mem.h"
 #include "core.h"
-#include "dma_engine.h"
 #include "constants.h"
+#include "dma_engine.h"
 
 namespace vortex {
 
@@ -31,7 +31,6 @@ public:
   struct PerfStats {
     CacheSim::PerfStats icache;
     CacheSim::PerfStats dcache;
-    DmaEngine::PerfStats dma;
   };
 
   std::vector<SimPort<MemReq>> mem_req_ports;
@@ -53,16 +52,6 @@ public:
     return cluster_;
   }
 
-  // Get core pointer (for DMA Engine)
-  Core* get_core(uint32_t index) const {
-    if (index >= cores_.size()) return nullptr;
-    return cores_[index].get();
-  }
-
-  // DCR interface
-  void dcr_write(uint32_t addr, uint32_t value);
-  uint32_t dcr_read(uint32_t addr) const;
-
   void reset();
 
   void tick();
@@ -83,6 +72,11 @@ public:
 
   PerfStats perf_stats() const;
 
+  // Public interface for execute.cpp to trigger DMA
+  void trigger_dma_transfer(uint64_t dst_addr, uint64_t src_addr, uint64_t size, int direction) {
+    dma_engine_->trigger_transfer(dst_addr, src_addr, size, direction);
+  }
+
 private:
   uint32_t                socket_id_;
   Cluster*                cluster_;
@@ -90,8 +84,6 @@ private:
   CacheCluster::Ptr       icaches_;
   CacheCluster::Ptr       dcaches_;
   DmaEngine::Ptr          dma_engine_;
-  
-  friend class DmaEngine;
 };
 
 } // namespace vortex

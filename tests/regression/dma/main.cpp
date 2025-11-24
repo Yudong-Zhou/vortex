@@ -25,7 +25,6 @@ vx_buffer_h src_buffer = nullptr;
 vx_buffer_h dst_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
-
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -53,173 +52,122 @@ static void parse_args(int argc, char **argv) {
       exit(-1);
     }
   }
-  
+
   if (count == 0) {
-    count = DMA_TEST_SIZE;
+    count = 16; // Default test size: 16 words (64 bytes)
   }
 }
 
 void cleanup() {
-  if (src_buffer) {
-    vx_buf_free(src_buffer);
-  }
-  if (dst_buffer) {
-    vx_buf_free(dst_buffer);
-  }
-  if (krnl_buffer) {
-    vx_buf_free(krnl_buffer);
-  }
-  if (args_buffer) {
-    vx_buf_free(args_buffer);
-  }
   if (device) {
+    vx_mem_free(src_buffer);
+    vx_mem_free(dst_buffer);
+    vx_mem_free(krnl_buffer);
+    vx_mem_free(args_buffer);
     vx_dev_close(device);
   }
 }
 
-void gen_test_data(std::vector<TYPE>& data, uint32_t size) {
-  for (uint32_t i = 0; i < size; ++i) {
-    data[i] = static_cast<TYPE>(i);
-  }
-}
-
-int run_test(const kernel_arg_t& kernel_arg, uint32_t buf_size, uint32_t num_points) {
-  // Allocate device buffers
-  std::cout << "Allocating device buffers..." << std::endl;
-  
-  RT_CHECK(vx_buf_alloc(device, buf_size, &src_buffer));
-  RT_CHECK(vx_buf_alloc(device, buf_size, &dst_buffer));
-  RT_CHECK(vx_buf_alloc(device, sizeof(kernel_arg_t), &args_buffer));
-  
-  std::cout << "  src_buffer=0x" << std::hex << vx_buf_addr(src_buffer) << std::dec << std::endl;
-  std::cout << "  dst_buffer=0x" << std::hex << vx_buf_addr(dst_buffer) << std::dec << std::endl;
-  
-  // Generate test data
-  std::vector<TYPE> h_src(num_points);
-  gen_test_data(h_src, num_points);
-  
-  std::cout << "Uploading source data..." << std::endl;
-  RT_CHECK(vx_copy_to_dev(src_buffer, h_src.data(), 0, buf_size));
-  
-  // Clear destination buffer
-  std::vector<TYPE> h_dst(num_points, 0);
-  RT_CHECK(vx_copy_to_dev(dst_buffer, h_dst.data(), 0, buf_size));
-  
-  // Upload kernel file
-  std::cout << "Uploading kernel..." << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
-  
-  // Update kernel arguments
-  kernel_arg_t args = kernel_arg;
-  args.src_addr = vx_buf_addr(src_buffer);
-  args.dst_addr = vx_buf_addr(dst_buffer);
-  args.size = num_points;
-  args.ref_addr = (uint64_t)h_src.data(); // For verification in kernel
-  
-  std::cout << "Uploading kernel arguments..." << std::endl;
-  RT_CHECK(vx_copy_to_dev(args_buffer, &args, 0, sizeof(kernel_arg_t)));
-  
-  // Start device
-  std::cout << "Starting device..." << std::endl;
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
-  
-  // Wait for completion
-  std::cout << "Waiting for completion..." << std::endl;
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
-  
-  // Download results
-  std::cout << "Downloading results..." << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, buf_size));
-  
-  // Verify results
-  std::cout << "Verifying results..." << std::endl;
-  int errors = 0;
-  
-  if (args.task_id == 0) {
-    // For G2L test, data should be unchanged in global memory
-    for (uint32_t i = 0; i < num_points; ++i) {
-      TYPE expected = h_src[i];
-      if (h_dst[i] != expected) {
-        if (errors < 10) {
-          std::cout << "  Error at index " << i << ": expected=" << expected 
-                    << ", got=" << h_dst[i] << std::endl;
-        }
-        errors++;
-      }
-    }
-  } else if (args.task_id == 1) {
-    // For L2G test, data should be modified (val * 2 + 1)
-    for (uint32_t i = 0; i < num_points; ++i) {
-      TYPE expected = h_src[i] * 2 + 1;
-      if (h_dst[i] != expected) {
-        if (errors < 10) {
-          std::cout << "  Error at index " << i << ": expected=" << expected 
-                    << ", got=" << h_dst[i] << std::endl;
-        }
-        errors++;
-      }
-    }
-  }
-  
-  if (errors == 0) {
-    std::cout << "PASSED!" << std::endl;
-  } else {
-    std::cout << "FAILED! " << errors << " errors found." << std::endl;
-  }
-  
-  return errors;
-}
-
 int main(int argc, char *argv[]) {
-  // Parse command line arguments
+  // parse command arguments
   parse_args(argc, argv);
-  
-  std::cout << "=== Vortex DMA Test ===" << std::endl;
-  std::cout << "Test size: " << count << " elements" << std::endl;
-  
-  // Open device connection
-  std::cout << "Opening device..." << std::endl;
+
+  std::cout << "DMA test: count=" << count << std::endl;
+
+  // open device connection
+  std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
-  
+
   uint64_t num_cores, num_warps, num_threads;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
-  
-  std::cout << "Device info:" << std::endl;
-  std::cout << "  Cores: " << num_cores << std::endl;
-  std::cout << "  Warps: " << num_warps << std::endl;
-  std::cout << "  Threads: " << num_threads << std::endl;
-  
-  uint32_t buf_size = count * sizeof(TYPE);
-  int total_errors = 0;
-  
-  // Test 1: Global to Local DMA
-  std::cout << "\n=== Test 1: Global to Local DMA ===" << std::endl;
-  kernel_arg.task_id = 0;
-  total_errors += run_test(kernel_arg, buf_size, count);
-  
-  // Clean up buffers for next test
-  if (src_buffer) vx_buf_free(src_buffer);
-  if (dst_buffer) vx_buf_free(dst_buffer);
-  if (krnl_buffer) vx_buf_free(krnl_buffer);
-  if (args_buffer) vx_buf_free(args_buffer);
-  src_buffer = dst_buffer = krnl_buffer = args_buffer = nullptr;
-  
-  // Test 2: Local to Global DMA
-  std::cout << "\n=== Test 2: Local to Global DMA ===" << std::endl;
-  kernel_arg.task_id = 1;
-  total_errors += run_test(kernel_arg, buf_size, count);
-  
-  // Cleanup
-  cleanup();
-  
-  if (total_errors == 0) {
-    std::cout << "\n=== ALL TESTS PASSED ===" << std::endl;
-    return 0;
-  } else {
-    std::cout << "\n=== TESTS FAILED ===" << std::endl;
-    return -1;
+
+  uint32_t buf_size = count * sizeof(uint32_t);
+
+  std::cout << "number of cores: " << num_cores << std::endl;
+  std::cout << "number of warps: " << num_warps << std::endl;
+  std::cout << "number of threads: " << num_threads << std::endl;
+  std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
+
+  // allocate device memory
+  std::cout << "allocate device memory" << std::endl;
+  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ_WRITE, &src_buffer));
+  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ_WRITE, &dst_buffer));
+
+  uint64_t src_addr, dst_addr;
+  RT_CHECK(vx_mem_address(src_buffer, &src_addr));
+  RT_CHECK(vx_mem_address(dst_buffer, &dst_addr));
+
+  std::cout << "dev_src=0x" << std::hex << src_addr << std::endl;
+  std::cout << "dev_dst=0x" << std::hex << dst_addr << std::endl;
+
+  // allocate shared memory
+  std::cout << "allocate shared memory" << std::endl;
+  uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
+  std::vector<uint8_t> src_data(alloc_size);
+  std::vector<uint8_t> dst_data(alloc_size);
+
+  // initialize source buffer
+  for (uint32_t i = 0; i < count; ++i) {
+    ((uint32_t*)src_data.data())[i] = i;
   }
+
+  // upload source buffer
+  std::cout << "upload source buffer" << std::endl;
+  RT_CHECK(vx_copy_to_dev(src_buffer, src_data.data(), 0, buf_size));
+
+  // clear destination buffer
+  memset(dst_data.data(), 0, buf_size);
+  RT_CHECK(vx_copy_to_dev(dst_buffer, dst_data.data(), 0, buf_size));
+
+  // upload program
+  std::cout << "upload program" << std::endl;
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+
+  // upload kernel argument
+  std::cout << "upload kernel argument" << std::endl;
+  kernel_arg.src_addr = src_addr;
+  kernel_arg.dst_addr = dst_addr;
+  kernel_arg.size = buf_size;
+
+  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+
+  // start device
+  std::cout << "start device" << std::endl;
+  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+
+  // wait for completion
+  std::cout << "wait for completion" << std::endl;
+  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+
+  // download destination buffer
+  std::cout << "download destination buffer" << std::endl;
+  RT_CHECK(vx_copy_from_dev(dst_data.data(), dst_buffer, 0, buf_size));
+
+  // verify result
+  std::cout << "verify result" << std::endl;
+  int errors = 0;
+  for (uint32_t i = 0; i < count; ++i) {
+    uint32_t expected = i;
+    uint32_t actual = ((uint32_t*)dst_data.data())[i];
+    if (actual != expected) {
+      std::cout << "error at [" << i << "]: expected=" << expected << ", actual=" << actual << std::endl;
+      ++errors;
+    }
+  }
+
+  // cleanup
+  std::cout << "cleanup" << std::endl;
+  cleanup();
+
+  if (errors != 0) {
+    std::cout << "FAILED! - " << std::dec << errors << " errors" << std::endl;
+    return errors;
+  }
+
+  std::cout << "PASSED!" << std::endl;
+
+  return 0;
 }
 
