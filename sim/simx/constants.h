@@ -52,4 +52,17 @@ inline constexpr uint32_t L3_NUM_REQS     = NUM_CLUSTERS * L2_MEM_PORTS;
 inline constexpr uint32_t PER_ISSUE_WARPS = NUM_WARPS / ISSUE_WIDTH;
 inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);
 
+// DMA Engine Configuration
+#ifndef DMA_QUEUE_SIZE
+#define DMA_QUEUE_SIZE 8
+#endif
+
+#ifndef DMA_BANDWIDTH
+#define DMA_BANDWIDTH 64        // bytes per cycle (1 cache line)
+#endif
+
+#ifndef DMA_STARTUP_LATENCY
+#define DMA_STARTUP_LATENCY 2   // cycles (reduced for faster small transfers)
+#endif
+
 } // namespace vortex

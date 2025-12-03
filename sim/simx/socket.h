@@ -20,7 +20,6 @@
 #include "local_mem.h"
 #include "core.h"
 #include "constants.h"
-#include "dma_engine.h"
 
 namespace vortex {
 
@@ -72,18 +71,12 @@ public:
 
   PerfStats perf_stats() const;
 
-  // Public interface for execute.cpp to trigger DMA
-  void trigger_dma_transfer(uint64_t dst_addr, uint64_t src_addr, uint64_t size, int direction) {
-    dma_engine_->trigger_transfer(dst_addr, src_addr, size, direction);
-  }
-
 private:
   uint32_t                socket_id_;
   Cluster*                cluster_;
   std::vector<Core::Ptr>  cores_;
   CacheCluster::Ptr       icaches_;
   CacheCluster::Ptr       dcaches_;
-  DmaEngine::Ptr          dma_engine_;
 };
 
 } // namespace vortex

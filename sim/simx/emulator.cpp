@@ -79,6 +79,7 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , warps_(arch.num_warps(), arch.num_threads())
     , barriers_(arch.num_barriers(), 0)
     , ipdom_size_(arch.num_threads()-1)
+    , dma_pending_configs_(arch.num_warps())
   #ifdef EXT_TCU_ENABLE
     , tensor_unit_(core->tensor_unit())
   #endif
@@ -111,6 +112,11 @@ void Emulator::reset() {
 
   for (auto& barrier : barriers_) {
     barrier.reset();
+  }
+
+  // Reset DMA configurations
+  for (auto& cfg : dma_pending_configs_) {
+    cfg.reset();
   }
 
 #ifdef EXT_V_ENABLE
@@ -221,6 +227,10 @@ bool Emulator::running() const {
 
 int Emulator::get_exitcode() const {
   return warps_.at(0).ireg_file.at(3).at(0);
+}
+
+DmaPendingConfig& Emulator::dma_config(uint32_t wid) {
+  return dma_pending_configs_.at(wid);
 }
 
 void Emulator::suspend(uint32_t wid) {

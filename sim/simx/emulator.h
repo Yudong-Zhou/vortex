@@ -76,6 +76,31 @@ struct wspawn_t {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// DMA configuration state (per-warp)
+struct DmaPendingConfig {
+  uint64_t dst_addr;
+  uint64_t src_addr;
+  uint64_t size;
+  bool has_dst;
+  bool has_src;
+  bool has_size;
+  
+  DmaPendingConfig() 
+    : dst_addr(0), src_addr(0), size(0)
+    , has_dst(false), has_src(false), has_size(false) {}
+  
+  void reset() {
+    dst_addr = src_addr = size = 0;
+    has_dst = has_src = has_size = false;
+  }
+  
+  bool is_ready() const {
+    return has_dst && has_src && has_size;
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 class Emulator {
 public:
   Emulator(const Arch &arch, const DCRS &dcrs, Core* core);
@@ -107,6 +132,9 @@ public:
   void dcache_read(void* data, uint64_t addr, uint32_t size);
 
   void dcache_write(const void* data, uint64_t addr, uint32_t size);
+
+  // Access DMA configuration for a warp (for execute stage)
+  DmaPendingConfig& dma_config(uint32_t wid);
 
 private:
 
@@ -154,6 +182,9 @@ private:
   uint32_t    ipdom_size_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
+
+  // DMA configuration state (one per warp)
+  std::vector<DmaPendingConfig> dma_pending_configs_;
 
 #ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr tensor_unit_;

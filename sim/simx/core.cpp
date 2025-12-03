@@ -168,6 +168,15 @@ Core::Core(const SimContext& ctx,
     commit_arbs_.at(iw) = arbiter;
   }
 
+  // create DMA engine (per-core)
+  snprintf(sname, 100, "%s-dma", this->name().c_str());
+  DmaEngine::Config dma_config;
+  dma_config.queue_size = DMA_QUEUE_SIZE;
+  dma_config.bandwidth = DMA_BANDWIDTH;
+  dma_config.startup_latency = DMA_STARTUP_LATENCY;
+  dma_config.num_channels = 4;
+  dma_engine_ = DmaEngine::Create(sname, dma_config);
+
   this->reset();
 }
 
@@ -178,6 +187,10 @@ Core::~Core() {
 void Core::reset() {
 
   emulator_.reset();
+
+  if (dma_engine_) {
+    dma_engine_->reset();
+  }
 
   for (auto& commit_arb : commit_arbs_) {
     commit_arb->reset();
@@ -209,6 +222,11 @@ void Core::tick() {
   this->decode();
   this->fetch();
   this->schedule();
+
+  // tick DMA engine
+  if (dma_engine_) {
+    dma_engine_->tick();
+  }
 
   ++perf_stats_.cycles;
   DPN(2, std::flush);
@@ -464,6 +482,12 @@ bool Core::wspawn(uint32_t num_warps, Word nextPC) {
 
 void Core::attach_ram(RAM* ram) {
   emulator_.attach_ram(ram);
+  
+  // Attach DMA engine to RAM and this core's local memory
+  if (dma_engine_) {
+    dma_engine_->attach_ram(ram);
+    dma_engine_->attach_core(this);
+  }
 }
 
 const Core::PerfStats& Core::perf_stats() const {

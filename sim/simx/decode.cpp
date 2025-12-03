@@ -476,11 +476,18 @@ static op_string_t op_string(const Instr &instr) {
     ,[&](DmaType dma_type)-> op_string_t {
       auto dmaArgs = std::get<IntrDmaArgs>(instrArgs);
       switch (dma_type) {
-      case DmaType::TRANSFER: {
-        uint64_t size = dmaArgs.size_dir & 0x7FFFFFFF;
-        int direction = (dmaArgs.size_dir >> 31) & 0x1;
-        return {"DMA", "size=" + std::to_string(size) + ", dir=" + std::to_string(direction)};
+      case DmaType::SET_DST:
+        return {"DMA_SET_DST", ""};
+      case DmaType::SET_SRC:
+        return {"DMA_SET_SRC", ""};
+      case DmaType::SET_SIZE:
+        return {"DMA_SET_SIZE", ""};
+      case DmaType::TRIGGER: {
+        std::string dir = (dmaArgs.direction == 0) ? "G2L" : "L2G";
+        return {"DMA_TRIGGER", dir};
       }
+      case DmaType::WAIT:
+        return {"DMA_WAIT", ""};
       default:
         std::abort();
       }
@@ -519,6 +526,15 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
   auto& ibuffer = warps_.at(wid).ibuffer;
 
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
+  
+  // DEBUG: Disabled - too verbose
+  // if ((int)op == 0x2B || (int)op == 0x0B) {
+  //   std::cout << "[DECODE_ALL] code=0x" << std::hex << code 
+  //             << ", opcode=0x" << (int)op << std::dec 
+  //             << ", wid=" << wid << std::endl;
+  //   std::flush(std::cout);
+  // }
+  
   auto funct2 = (code >> shift_funct2) & mask_funct2;
   auto funct3 = (code >> shift_funct3) & mask_funct3;
   auto funct5 = (code >> shift_funct5) & mask_funct5;
@@ -1130,20 +1146,63 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       }
     } break;
   #endif
-    case 3: { // DMA
-      switch (funct3) {
-      case 0: { // VX_DMA
-        auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
-        instr->setOpType(DmaType::TRANSFER);
-        instr->setArgs(IntrDmaArgs{static_cast<uint64_t>(rs2)});
-        instr->setSrcReg(0, rd, RegType::Integer);  // rd contains dst address
-        instr->setSrcReg(1, rs1, RegType::Integer); // rs1 contains src address
-        ibuffer.push_back(instr);
-      } break;
       default:
         std::abort();
       }
     } break;
+  case Opcode::EXT2: { // DMA Instructions (I-type)
+    // I-type format: | imm[11:0] | rs1 | funct3 | rd | opcode |
+    // Direct dispatch by funct3 (no funct7 check needed for I-type)
+    // Extract imm12 from I-type instruction (bits[31:20])
+    uint32_t imm12 = code >> shift_rs2;
+    
+    switch (funct3) {
+    case 0x0: { // DMA_TRIGGER
+      int direction = imm12 & 0x1;
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
+      instr->setOpType(DmaType::TRIGGER);
+      instr->setArgs(IntrDmaArgs{direction});
+      instr->setDestReg(rd, RegType::Integer);
+      ibuffer.push_back(instr);
+      DPH(2, "Decoded DMA_TRIGGER: dir=" << direction << ", rd=" << rd);
+    } break;
+    
+    case 0x1: { // DMA_SET_DST
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
+      instr->setOpType(DmaType::SET_DST);
+      instr->setArgs(IntrDmaArgs{});
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      ibuffer.push_back(instr);
+      DPH(2, "Decoded DMA_SET_DST: rs1=" << rs1);
+    } break;
+    
+    case 0x2: { // DMA_SET_SRC
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
+      instr->setOpType(DmaType::SET_SRC);
+      instr->setArgs(IntrDmaArgs{});
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      ibuffer.push_back(instr);
+      DPH(2, "Decoded DMA_SET_SRC: rs1=" << rs1);
+    } break;
+    
+    case 0x3: { // DMA_SET_SIZE
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
+      instr->setOpType(DmaType::SET_SIZE);
+      instr->setArgs(IntrDmaArgs{});
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      ibuffer.push_back(instr);
+      DPH(2, "Decoded DMA_SET_SIZE: rs1=" << rs1);
+    } break;
+    
+    case 0x4: { // DMA_WAIT
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
+      instr->setOpType(DmaType::WAIT);
+      instr->setArgs(IntrDmaArgs{});
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      ibuffer.push_back(instr);
+      DPH(2, "Decoded DMA_WAIT: rs1=" << rs1);
+    } break;
+    
     default:
       std::abort();
     }

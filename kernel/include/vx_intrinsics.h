@@ -282,31 +282,92 @@ inline __attribute__((const)) int vx_shfl_idx(size_t value, int bval, int cval, 
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// DMA Transfer Instructions
+// DMA Transfer Instructions - Multi-instruction Sequence
 ///////////////////////////////////////////////////////////////////////////////
 
 // DMA transfer directions
 #define DMA_DIR_G2L 0  // Global to Local Memory
 #define DMA_DIR_L2G 1  // Local to Global Memory
 
-// DMA transfer (generic)
-inline void vx_dma_transfer(void* dst, void* src, size_t size, int direction) {
+// DMA operation return type
+typedef int dma_id_t;
+
+// Internal: DMA configuration instructions
+// Note: These are internal use only, users should not call directly
+
+inline void __vx_dma_set_dst(void* dst) {
     __asm__ volatile (
-        ".insn r 0x0B, 0x0, 0x3, %0, %1, %2"
+        ".insn i 0x2B, 0x1, x0, %0, 0"  // opcode=EXT2, funct3=0x1
         : 
-        : "r"(dst), "r"(src), "r"(size | ((size_t)direction << 31))
+        : "r"(dst)
         : "memory"
     );
 }
 
-// DMA Global to Local
-inline void vx_dma_g2l(void* local_dst, void* global_src, size_t size) {
-    vx_dma_transfer(local_dst, global_src, size, DMA_DIR_G2L);
+inline void __vx_dma_set_src(void* src) {
+    __asm__ volatile (
+        ".insn i 0x2B, 0x2, x0, %0, 0"  // opcode=EXT2, funct3=0x2
+        : 
+        : "r"(src)
+        : "memory"
+    );
 }
 
-// DMA Local to Global
-inline void vx_dma_l2g(void* global_dst, void* local_src, size_t size) {
-    vx_dma_transfer(global_dst, local_src, size, DMA_DIR_L2G);
+inline void __vx_dma_set_size(size_t size) {
+    __asm__ volatile (
+        ".insn i 0x2B, 0x3, x0, %0, 0"  // opcode=EXT2, funct3=0x3
+        : 
+        : "r"(size)
+        : "memory"
+    );
+}
+
+// Separate trigger functions for each direction to ensure compile-time constant
+inline dma_id_t __vx_dma_trigger_g2l() {
+    dma_id_t dma_id;
+    __asm__ volatile (
+        ".insn i 0x2B, 0x0, %0, x0, 0"  // opcode=EXT2, funct3=0x0, imm=0 (G2L)
+        : "=r"(dma_id)
+        : 
+        : "memory"
+    );
+    return dma_id;
+}
+
+inline dma_id_t __vx_dma_trigger_l2g() {
+    dma_id_t dma_id;
+    __asm__ volatile (
+        ".insn i 0x2B, 0x0, %0, x0, 1"  // opcode=EXT2, funct3=0x0, imm=1 (L2G)
+        : "=r"(dma_id)
+        : 
+        : "memory"
+    );
+    return dma_id;
+}
+
+// Public API: Direct DMA transfer functions
+inline dma_id_t vx_dma_g2l(void* local_dst, void* global_src, size_t size) {
+    __vx_dma_set_dst(local_dst);
+    __vx_dma_set_src(global_src);
+    __vx_dma_set_size(size);
+    return __vx_dma_trigger_g2l();
+}
+
+inline dma_id_t vx_dma_l2g(void* global_dst, void* local_src, size_t size) {
+    __vx_dma_set_dst(global_dst);
+    __vx_dma_set_src(local_src);
+    __vx_dma_set_size(size);
+    return __vx_dma_trigger_l2g();
+}
+
+// DMA wait instruction
+inline void vx_dma_wait(dma_id_t dma_id) {
+    __asm__ volatile (
+        ".insn i 0x2B, 0x4, x0, %0, 0"  // opcode=EXT2, funct3=0x4
+        :
+        : "r"(dma_id)
+        : "memory"
+    );
 }
 
 #ifdef __cplusplus

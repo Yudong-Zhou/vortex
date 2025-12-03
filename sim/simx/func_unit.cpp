@@ -19,6 +19,8 @@
 #include <util.h>
 #include "debug.h"
 #include "core.h"
+#include "socket.h"
+#include "dma_engine.h"
 #include "constants.h"
 #include "cache_sim.h"
 #include "VX_types.h"
@@ -353,6 +355,64 @@ void SfuUnit::tick() {
 		auto trace = input.front();
 		bool release_warp = trace->fetch_stall;
 		int delay = 2;
+
+		// Handle DMA instructions
+		if (std::holds_alternative<DmaType>(trace->op_type)) {
+			auto dma_type = std::get<DmaType>(trace->op_type);
+			
+			if (dma_type == DmaType::SET_DST ||
+			    dma_type == DmaType::SET_SRC ||
+			    dma_type == DmaType::SET_SIZE) {
+				// Configuration instructions: fast pass through, 1 cycle
+				output.push(trace, 1);
+				DT(3, this->name() << ": op=" << dma_type << ", " << *trace);
+				
+			} else if (dma_type == DmaType::TRIGGER) {
+				// Trigger instruction: slightly longer delay (access DMA Engine)
+				output.push(trace, 2 + delay);
+				DT(3, this->name() << ": op=DMA_TRIGGER, " << *trace);
+				
+			} else if (dma_type == DmaType::WAIT) {
+				// Wait instruction: poll until completion
+				auto sfu_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
+				
+				if (sfu_data) {
+					uint32_t dma_id = sfu_data->arg1;
+					
+					// Check if DMA is completed
+					bool completed = core_->dma_engine()->is_completed(dma_id);
+					
+					if (!completed) {
+						// Still in progress, do NOT pop input, keep stalling
+						DT(4, "DMA Wait stalling warp " << trace->wid 
+							<< " for DMA " << dma_id);
+						continue;  // Don't pop, don't push output
+					}
+					
+					// Completed! Acknowledge and release warp
+					core_->dma_engine()->acknowledge_completion(dma_id);
+					output.push(trace, 1 + delay);
+					
+					// IMPORTANT: Must resume warp here because continue below skips the check
+					if (trace->eop) {
+						core_->resume(trace->wid);
+					}
+					
+					DT(3, "DMA Wait complete: warp " << trace->wid 
+						<< ", DMA " << dma_id);
+				} else {
+					// No data? Just pass through and resume warp
+					output.push(trace, 1 + delay);
+					if (trace->eop) {
+						core_->resume(trace->wid);
+					}
+				}
+				DT(3, this->name() << ": op=DMA_WAIT, " << *trace);
+			}
+			
+			input.pop();
+			continue;
+		}
 
 		if (std::get_if<WctlType>(&trace->op_type)) {
 			auto wctl_type = std::get<WctlType>(trace->op_type);

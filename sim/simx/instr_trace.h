@@ -43,6 +43,18 @@ struct SfuTraceData : public ITraceData {
   SfuTraceData(Word arg1, Word arg2) : arg1(arg1), arg2(arg2) {}
 };
 
+struct DmaTraceData : public ITraceData {
+  using Ptr = std::shared_ptr<DmaTraceData>;
+  uint64_t desc_addr;
+  uint64_t dst_addr;
+  uint64_t src_addr;
+  uint64_t size;
+  int direction;
+  
+  DmaTraceData(uint64_t desc) 
+    : desc_addr(desc), dst_addr(0), src_addr(0), size(0), direction(0) {}
+};
+
 struct instr_trace_t {
 public:
   //--

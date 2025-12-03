@@ -661,18 +661,29 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// DMA types
+// DMA types - Multi-instruction sequence
 enum class DmaType {
-  TRANSFER,  // DMA transfer operation
+  SET_DST,   // Set destination address
+  SET_SRC,   // Set source address
+  SET_SIZE,  // Set transfer size
+  TRIGGER,   // Trigger DMA transfer
+  WAIT,      // Wait for DMA completion
 };
 
 struct IntrDmaArgs {
-  uint64_t size_dir; // size and direction (bit 31 for direction)
+  int direction;  // 0=G2L, 1=L2G
+  
+  IntrDmaArgs() : direction(0) {}
+  explicit IntrDmaArgs(int dir) : direction(dir) {}
 };
 
 inline std::ostream &operator<<(std::ostream &os, const DmaType& type) {
   switch (type) {
-  case DmaType::TRANSFER: os << "TRANSFER"; break;
+  case DmaType::SET_DST: os << "DMA_SET_DST"; break;
+  case DmaType::SET_SRC: os << "DMA_SET_SRC"; break;
+  case DmaType::SET_SIZE: os << "DMA_SET_SIZE"; break;
+  case DmaType::TRIGGER: os << "DMA_TRIGGER"; break;
+  case DmaType::WAIT: os << "DMA_WAIT"; break;
   default:
     assert(false);
   }

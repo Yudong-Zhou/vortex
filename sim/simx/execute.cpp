@@ -26,6 +26,7 @@
 #include "instr.h"
 #include "core.h"
 #include "socket.h"
+#include "dma_engine.h"
 #include "types.h"
 #ifdef EXT_V_ENABLE
 #include "processor_impl.h"
@@ -1469,20 +1470,86 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
   #endif // EXT_TCU_ENABLE
     ,[&](DmaType dma_type) {
       auto dmaArgs = std::get<IntrDmaArgs>(instrArgs);
+      auto& dma_cfg = this->dma_config(wid);  // Get current warp's config
+      
       switch (dma_type) {
-      case DmaType::TRANSFER: {
-        uint64_t size_dir = dmaArgs.size_dir;
-        uint64_t size = size_dir & 0x7FFFFFFF; // Lower 31 bits for size
-        int direction = (size_dir >> 31) & 0x1; // Bit 31 for direction
-
-        // Get addresses from source registers
-        // rs1_data[0] = rd (dst address), rs1_data[1] = rs1 (src address)
-        uint64_t dst_addr = rs1_data[thread_start].u;
-        uint64_t src_addr = rs2_data[thread_start].u;
-
-        // Trigger DMA transfer through Socket's public interface
-        core_->socket()->trigger_dma_transfer(dst_addr, src_addr, size, direction);
+      case DmaType::SET_DST: {
+        // Read destination address from rs1
+        dma_cfg.dst_addr = rs1_data[thread_start].u;
+        dma_cfg.has_dst = true;
+        DT(3, "DMA Set DST: addr=0x" << std::hex << dma_cfg.dst_addr << std::dec);
       } break;
+      
+      case DmaType::SET_SRC: {
+        // Read source address from rs1
+        dma_cfg.src_addr = rs1_data[thread_start].u;
+        dma_cfg.has_src = true;
+        DT(3, "DMA Set SRC: addr=0x" << std::hex << dma_cfg.src_addr << std::dec);
+      } break;
+      
+      case DmaType::SET_SIZE: {
+        // Read transfer size from rs1
+        dma_cfg.size = rs1_data[thread_start].u;
+        dma_cfg.has_size = true;
+        DT(3, "DMA Set SIZE: size=" << dma_cfg.size);
+      } break;
+      
+      case DmaType::TRIGGER: {
+        // Check if configuration is complete
+        if (!dma_cfg.is_ready()) {
+          DT(1, "ERROR: DMA TRIGGER without complete configuration!");
+          std::abort();
+        }
+        
+        int direction = dmaArgs.direction;
+        
+        DT(3, "DMA Trigger: dst=0x" << std::hex << dma_cfg.dst_addr 
+            << ", src=0x" << dma_cfg.src_addr 
+            << ", size=" << std::dec << dma_cfg.size
+            << ", direction=" << (direction == 0 ? "G2L" : "L2G"));
+        
+        // Request DMA transfer (using core's own DMA engine)
+        int32_t dma_id = core_->dma_engine()->request_transfer(
+            dma_cfg.dst_addr, dma_cfg.src_addr, dma_cfg.size, direction
+        );
+        
+        if (dma_id >= 0) {
+          // Success, return DMA ID to rd
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!warp.tmask.test(t))
+              continue;
+            rd_data[t].i = dma_id;
+          }
+          rd_write = true;
+          DT(3, "DMA Transfer initiated: id=" << dma_id);
+        } else {
+          // Queue full, return -1
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!warp.tmask.test(t))
+              continue;
+            rd_data[t].i = -1;
+          }
+          rd_write = true;
+          DT(3, "DMA Transfer failed: queue full");
+        }
+        
+        // Reset configuration for next transfer
+        dma_cfg.reset();
+      } break;
+      
+      case DmaType::WAIT: {
+        // Read DMA ID from rs1
+        uint32_t dma_id = rs1_data[thread_start].u;
+        
+        // Stall warp until DMA completes
+        trace->fetch_stall = true;
+        
+        // Store DMA ID in trace data for SFU to check
+        trace->data = std::make_shared<SfuTraceData>(dma_id, 0);
+        
+        DT(3, "DMA Wait: id=" << dma_id << ", stalling warp " << wid);
+      } break;
+      
       default:
         std::abort();
       }

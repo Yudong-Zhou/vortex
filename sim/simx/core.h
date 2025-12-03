@@ -33,6 +33,7 @@
 #include "dispatcher.h"
 #include "func_unit.h"
 #include "mem_coalescer.h"
+#include "dma_engine.h"
 #include "VX_config.h"
 
 namespace vortex {
@@ -147,6 +148,10 @@ public:
     return local_mem_;
   }
 
+  DmaEngine* dma_engine() const {
+    return dma_engine_.get();
+  }
+
   const MemCoalescer::Ptr& mem_coalescer(uint32_t idx) const {
     return mem_coalescers_.at(idx);
   }
@@ -210,6 +215,7 @@ private:
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
+  DmaEngine::Ptr dma_engine_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;

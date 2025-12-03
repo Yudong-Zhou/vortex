@@ -65,10 +65,6 @@ Socket::Socket(const SimContext& ctx,
     2,                      // pipeline latency
   });
 
-  // create DMA engine
-  snprintf(sname, 100, "%s-dma", this->name().c_str());
-  dma_engine_ = DmaEngine::Create(sname);
-
   // find overlap
   uint32_t overlap = MIN(ICACHE_MEM_PORTS, L1_MEM_PORTS);
 
@@ -122,22 +118,18 @@ Socket::~Socket() {
 }
 
 void Socket::reset() {
-  //--
+  // DMA engines are now per-core, reset handled in Core::reset()
 }
 
 void Socket::tick() {
-  //--
+  // DMA engines are now per-core, tick handled in Core::tick()
 }
 
 void Socket::attach_ram(RAM* ram) {
   for (auto core : cores_) {
     core->attach_ram(ram);
+    // Each core's DMA engine is attached to RAM and local mem in Core::attach_ram()
   }
-  dma_engine_->attach_ram(ram);
-  // Attach DMA engine to the first core for Local Memory access
-  // In a multi-core system, each core has its own Local Memory
-  // For simplicity, we use core 0's Local Memory for now
-  dma_engine_->attach_core(cores_.at(0).get());
 }
 
 #ifdef VM_ENABLE
