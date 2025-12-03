@@ -13,6 +13,10 @@
 
 `include "VX_platform.vh"
 
+// use this engine
+// queue different requests, and send to cache, give reponse back.
+// unit could be put into every TMA engine.
+
 `TRACING_OFF
 module VX_mem_scheduler #(
     parameter `STRING INSTANCE_ID = "",

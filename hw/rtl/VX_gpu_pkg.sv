@@ -115,8 +115,10 @@ package VX_gpu_pkg;
 	localparam EX_SFU = 2;
 	localparam EX_FPU = (EX_SFU + `EXT_F_ENABLED);
     localparam EX_TCU = (EX_FPU + `EXT_TCU_ENABLED);
-
-	localparam NUM_EX_UNITS = EX_TCU + 1;
+    // zyd
+    localparam EX_TMA = 5;
+	localparam NUM_EX_UNITS = EX_TMA + 1;
+    
 	localparam EX_BITS = `CLOG2(NUM_EX_UNITS);
 	localparam EX_WIDTH = `UP(EX_BITS);
 
@@ -445,6 +447,32 @@ package VX_gpu_pkg;
 `endif
 
     ///////////////////////////////////////////////////////////////////////////
+
+    // zyd
+    parameter int TMA_ADDR_WIDTH = 64;
+    parameter int TMA_NDIMS      = 2;
+
+    typedef struct packed {
+        logic [1:0]  elementSizeLog2;                       // 元素字节数 = 1 << elementSizeLog2
+        logic [15:0] tensorSize   [TMA_NDIMS];              // 张量在每个维度的大小（总 H, W）
+        logic [31:0] tensorStride [TMA_NDIMS];              // 每个维度的 stride（字节）
+        logic [TMA_ADDR_WIDTH-1:0] baseGlobalAddr;          // 张量起始 global 地址（字节）
+    } tma_tensor_desc_t;
+
+    typedef struct packed {
+        logic [15:0] boxSize      [TMA_NDIMS];              // box 高/宽（搬多大）
+        logic [15:0] boxCorner    [TMA_NDIMS];              // box 左上角在 tensor 中的位置 (y,x)
+        logic [31:0] sharedBaseAddr;                        // shared mem 起始“元素 index/字节”（按实现约定）
+        logic [31:0] sharedStride [TMA_NDIMS];              // 在 shared 中每个维度的 stride（单位同 sharedBaseAddr）
+    } tma_access_desc_t;
+
+    typedef struct packed {
+        tma_tensor_desc_t tensor;
+        tma_access_desc_t access;
+    } tma_desc_t;
+
+endpackage
+
 
     typedef struct packed {
         logic                    valid;

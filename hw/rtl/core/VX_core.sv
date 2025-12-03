@@ -211,6 +211,53 @@ module VX_core import VX_gpu_pkg::*; #(
         .dcache_bus_if (dcache_bus_if)
     );
 
+    // zyd
+    // =========================
+    // TMA: execute <-> tma_engine
+    // =========================
+    // 指令侧 handshake
+    tma_desc_t              tma_req_desc;
+    logic                   tma_req_valid;
+    logic [7:0]             tma_req_tag;     // 这里先假设 REQ_TAGW = 8
+    logic                   tma_req_ready;
+
+    logic                   tma_done_valid;
+    logic [7:0]             tma_done_tag;
+    logic                   tma_done_ready;
+
+    // shared memory 写口（从 tma_engine 到 execute，execute 内部再接到 lmem）
+    logic                   tma_smem_we;
+    logic [15:0]            tma_smem_addr;   // 假设 SMEM_ADDR_WIDTH = 16
+    logic [LSU_WORD_SIZE*8-1:0] tma_smem_wdata;
+    logic                   tma_smem_ready;
+
+    // =========================
+    // TMA: tma_engine <-> mem_unit (core_req/core_rsp)
+    // =========================
+
+    localparam int TMA_CORE_REQS   = `NUM_LSU_LANES;       // 你可以和 LSU lane 数保持一致
+    localparam int TMA_WORD_SIZE   = LSU_WORD_SIZE;
+    localparam int TMA_TAG_WIDTH   = 8;
+
+    logic                          tma_core_req_valid;
+    logic                          tma_core_req_rw;
+    logic [TMA_CORE_REQS-1:0]      tma_core_req_mask;
+    logic [TMA_CORE_REQS-1:0][TMA_WORD_SIZE-1:0]   tma_core_req_byteen;
+    logic [TMA_CORE_REQS-1:0][31:0]                tma_core_req_addr;   // 这里先假设 ADDR_WIDTH=32
+    logic [TMA_CORE_REQS-1:0][TMA_WORD_SIZE*8-1:0] tma_core_req_data;
+    logic [TMA_TAG_WIDTH-1:0]      tma_core_req_tag;
+    logic                          tma_core_req_ready;
+
+    logic                          tma_core_rsp_valid;
+    logic [TMA_CORE_REQS-1:0]      tma_core_rsp_mask;
+    logic [TMA_CORE_REQS-1:0][TMA_WORD_SIZE*8-1:0] tma_core_rsp_data;
+    logic [TMA_TAG_WIDTH-1:0]      tma_core_rsp_tag;
+    logic                          tma_core_rsp_sop;
+    logic                          tma_core_rsp_eop;
+    logic                          tma_core_rsp_ready;
+
+
+
 `ifdef PERF_ENABLE
 
     wire [`CLOG2(LSU_NUM_REQS+1)-1:0] perf_dcache_rd_req_per_cycle;
