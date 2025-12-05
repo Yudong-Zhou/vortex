@@ -39,15 +39,23 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
-    VX_warp_ctl_if.master   warp_ctl_if
+    VX_warp_ctl_if.master   warp_ctl_if,
+
+    // === 新增：DMA 接口 & warp stall 输出 ===
+    VX_dma_bus_if.master    dma_bus_if,
+    output wire [`NUM_WARPS-1:0] dma_warp_stall
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+
     localparam BLOCK_SIZE   = 1;
     localparam NUM_LANES    = `NUM_SFU_LANES;
-    localparam PE_COUNT     = 2;
-    localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
+
+    // === 更新 PE 索引与数量（4.3 要求） ===
     localparam PE_IDX_WCTL  = 0;
     localparam PE_IDX_CSRS  = 1;
+    localparam PE_IDX_DMA   = 2;   // 新增 DMA PE
+    localparam PE_COUNT     = 3;   // 从 2 扩展为 3
+    localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
 
     VX_execute_if #(
         .data_t (sfu_exe_t)
@@ -76,11 +84,14 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .data_t (sfu_res_t)
     ) pe_result_if[PE_COUNT]();
 
+    // === 修改后的 PE 选择逻辑：增加 DMA PE ===
     reg [PE_SEL_BITS-1:0] pe_select;
     always @(*) begin
         pe_select = PE_IDX_WCTL;
         if (inst_sfu_is_csr(per_block_execute_if[0].data.op_type)) begin
             pe_select = PE_IDX_CSRS;
+        end else if (inst_sfu_is_dma(per_block_execute_if[0].data.op_type)) begin
+            pe_select = PE_IDX_DMA;
         end
     end
 
@@ -91,13 +102,13 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .REQ_OUT_BUF(0),
         .RSP_OUT_BUF(3)
     ) pe_switch (
-        .clk        (clk),
-        .reset      (reset),
-        .pe_sel     (pe_select),
+        .clk           (clk),
+        .reset         (reset),
+        .pe_sel        (pe_select),
         .execute_in_if (per_block_execute_if[0]),
         .result_out_if (per_block_result_if[0]),
-        .execute_out_if (pe_execute_if),
-        .result_in_if (pe_result_if)
+        .execute_out_if(pe_execute_if),
+        .result_in_if  (pe_result_if)
     );
 
     VX_wctl_unit #(
@@ -134,6 +145,19 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .sched_csr_if   (sched_csr_if),
         .commit_csr_if  (commit_csr_if),
         .result_if      (pe_result_if[PE_IDX_CSRS])
+    );
+
+    // === 新增：DMA Unit 实例（4.3 里的内容） ===
+    VX_dma_unit #(
+        .INSTANCE_ID (`SFORMATF(("%s-dma", INSTANCE_ID))),
+        .NUM_LANES (NUM_LANES)
+    ) dma_unit (
+        .clk            (clk),
+        .reset          (reset),
+        .execute_if     (pe_execute_if[PE_IDX_DMA]),
+        .result_if      (pe_result_if[PE_IDX_DMA]),
+        .dma_bus_if     (dma_bus_if),
+        .warp_stall_mask(dma_warp_stall)
     );
 
     VX_gather_unit #(

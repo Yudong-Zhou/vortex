@@ -378,7 +378,7 @@
 `define NUM_LSU_LANES   `SIMD_WIDTH
 `endif
 `ifndef NUM_LSU_BLOCKS
-`define NUM_LSU_BLOCKS  2 // zyd
+`define NUM_LSU_BLOCKS  1
 `endif
 
 // Number of SFU units

@@ -255,4 +255,26 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     end
 
+    // === DMA Local Memory access path ===
+    // 只有 LMEM_ENABLE 时才接入 LocalMem
+    `ifdef LMEM_ENABLE
+    VX_mem_bus_if dma_lmem_bus_if[`NUM_LSU_LANES]();
+
+    assign dma_lmem_bus_if   = lmem_adapt_if; // DMA 写 local mem 入口
+    `else
+    // 无 LMEM 时直通 dcache
+    VX_mem_bus_if dma_lmem_bus_if[1]();
+    assign dma_lmem_bus_if[0] = dcache_bus_if[0];
+    `endif
+
+    // === DMA Global Memory path直连 dcache入口0 (避开 LSU/Coalescer) ===
+    VX_mem_bus_if dma_gmem_bus_if();
+    assign dcache_bus_if[0] = dma_gmem_bus_if;   // DMA global直接进入Dcache通路口0
+
+    // === Export to VX_core wiring (供 VX_core 连接 DMA Engine) ===
+    `ifdef EXPORT_DMA_BUS
+        assign dma_lmem_if = dma_lmem_bus_if;
+        assign dma_gmem_if = dma_gmem_bus_if;
+    `endif
+
 endmodule

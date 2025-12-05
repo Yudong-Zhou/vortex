@@ -537,6 +537,51 @@ module VX_decode import VX_gpu_pkg::*; #(
                     default:;
                 endcase
             end
+            // zyd
+            INST_EXT2: begin     // 假设 DMA 扩展使用 EXT2 opcode（你文档中为自定义扩展空间）
+                ex_type = EX_SFU;   // DMA 走 SFU 通道
+                is_wstall = 1;      // 触发和等待均需阻塞 warp
+
+                case (funct3)
+                    3'h0: begin // DMA_SET_DST
+                        op_type = INST_OP_BITS'(INST_DMA_SET_DST);
+                        op_args.dma.direction = 1'b0; // reserved 无作用
+                        `USED_IREG (rs1);             // rs1 = dst_addr
+                    end
+
+                    3'h1: begin // DMA_SET_SRC
+                        op_type = INST_OP_BITS'(INST_DMA_SET_SRC);
+                        op_args.dma.direction = 1'b0;
+                        `USED_IREG (rs1);             // rs1 = src_addr
+                    end
+
+                    3'h2: begin // DMA_SET_SIZE
+                        op_type = INST_OP_BITS'(INST_DMA_SET_SIZE);
+                        op_args.dma.direction = 1'b0;
+                        `USED_IREG (rs1);             // rs1 = byte size
+                    end
+
+                    3'h3: begin // DMA_TRIGGER (G2L)
+                        op_type = INST_OP_BITS'(INST_DMA_TRIGGER);
+                        op_args.dma.direction = 1'b0; // 0 = global->local
+                        `USED_IREG (rd);              // rd <- dma_id
+                    end
+
+                    3'h4: begin // DMA_TRIGGER (L2G)
+                        op_type = INST_OP_BITS'(INST_DMA_TRIGGER);
+                        op_args.dma.direction = 1'b1; // 1 = local->global
+                        `USED_IREG (rd);
+                    end
+
+                    3'h5: begin // DMA_WAIT
+                        op_type = INST_OP_BITS'(INST_DMA_WAIT);
+                        op_args.dma.direction = 1'b0;
+                        `USED_IREG (rs1);             // wait(rs1 = dma_id)
+                    end
+
+                    default:;
+                endcase
+            end
             default:;
         endcase
     end

@@ -74,18 +74,6 @@ module VX_execute import VX_gpu_pkg::*; #(
         .lsu_mem_if     (lsu_mem_if[0])
     );
 
-    // zyd
-    VX_tma_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-tma", INSTANCE_ID)))
-    ) tma_unit (
-        `SCOPE_IO_BIND  (0)
-        .clk        (clk),
-        .reset      (reset),
-        .dispatch_if (dispatch_if[EX_TMA * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
-        .commit_if   (commit_if  [EX_TMA * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
-        .tma_mem_if  (lsu_mem_if[1])
-    );
-
 `ifdef EXT_F_ENABLE
     VX_fpu_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-fpu", INSTANCE_ID)))
