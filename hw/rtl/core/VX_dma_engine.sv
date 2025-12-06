@@ -25,12 +25,12 @@ module VX_dma_engine #(
     // 一些基本类型与宽度
     // -------------------------------------------------------------
 
-    typedef dma_req_if.req_data_t  dma_req_t;
-    typedef dma_req_if.rsp_data_t  dma_rsp_t;
+    typedef req_data_t  dma_req_t;
+    typedef rsp_data_t  dma_rsp_t;
 
-    localparam ADDR_WIDTH = $bits(dma_req_t::src_addr);
+    localparam ADDR_WIDTH = 32;
     localparam SIZE_WIDTH = 16;
-    localparam TAG_WIDTH  = $bits(dma_req_t::tag);
+    localparam TAG_WIDTH  = 8;
 
     // 请求队列中存的东西 = 原始 dma_req_t
     localparam REQ_Q_DATAW = $bits(dma_req_t);
@@ -188,8 +188,12 @@ module VX_dma_engine #(
     // 真正与 lmem/gmem 交互的逻辑后续再通过 VX_stream_arb + VX_mem_bus_if 接入。
 
     // 防止未使用警告（根据你本地宏可以替换）
-    // `UNUSED_VAR (lmem_bus_if)
-    // `UNUSED_VAR (gmem_bus_if)
+    `UNUSED_VAR (lmem_bus_if.req_valid)
+    `UNUSED_VAR (lmem_bus_if.req_data)
+    `UNUSED_VAR (lmem_bus_if.rsp_ready)
+    `UNUSED_VAR (gmem_bus_if.req_valid)
+    `UNUSED_VAR (gmem_bus_if.req_data)
+    `UNUSED_VAR (gmem_bus_if.rsp_ready)
 
     // -------------------------------------------------------------
     // 主时序逻辑：Channel FSM + 分发 + 完成

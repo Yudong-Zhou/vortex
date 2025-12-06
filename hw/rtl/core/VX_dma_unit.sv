@@ -27,11 +27,11 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
     // 与 CSR 单元保持一致的 PID / DATAW 计算方式
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
-    localparam DATAW      = `UUID_WIDTH
-                          + `NW_WIDTH              // wid
+    localparam DATAW      = UUID_WIDTH
+                          + NW_WIDTH              // wid
                           + NUM_LANES             // tmask
-                          + `PC_BITS
-                          + `NR_BITS              // rd
+                          + PC_BITS
+                          + 5              // rd
                           + 1                     // wb
                           + NUM_LANES * `XLEN     // data
                           + PID_WIDTH             // pid
@@ -39,12 +39,12 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
                           + 1;                    // eop
 
     // 从 dma_bus_if 推导地址宽度和 DMA ID 宽度
-    typedef dma_bus_if.req_data_t dma_req_t;
-    typedef dma_bus_if.rsp_data_t dma_rsp_t;
+    typedef req_data_t dma_req_t;
+    typedef rsp_data_t dma_rsp_t;
 
-    localparam ADDR_WIDTH   = $bits(dma_req_t::src_addr);
+    localparam ADDR_WIDTH   = 32;
     localparam SIZE_WIDTH   = 16;
-    localparam DMA_ID_WIDTH = $bits(dma_req_t::tag);
+    localparam DMA_ID_WIDTH = 8;
 
     localparam NUM_WARPS    = `NUM_WARPS;
 
@@ -58,7 +58,7 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
         assign rs1_data[i] = execute_if.data.rs1_data[i];
     end
 
-    wire [`NW_WIDTH-1:0] wid = execute_if.data.wid;
+    wire [NW_WIDTH-1:0] wid = execute_if.data.wid;
 
     // ====== 指令类型判定 ======
 
@@ -189,7 +189,7 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
     assign dma_bus_if.req_data.src_addr       = warp_src_addr[wid];
     assign dma_bus_if.req_data.dst_addr       = warp_dst_addr[wid];
     assign dma_bus_if.req_data.size           = warp_size[wid];
-    assign dma_bus_if.req_data.to_lmem        = dma_dir_to_lmem;
+    assign dma_bus_if.req_data.direction        = dma_dir_to_lmem;
     assign dma_bus_if.req_data.tag            = curr_dma_id;
 
     // 你如果希望更安全一点，也可以在这里加 assert：
@@ -272,12 +272,6 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
 
             for (w = 0; w < NUM_WARPS; ++w) begin
                 warp_stall_r[w] <= warp_waiting[w] && warp_pending[w];
-            end
-        end
-        if (state == S_WAIT) begin
-            if (dma_rsp_if.valid) begin
-                state <= S_DONE;
-                pending <= 0;
             end
         end
     end

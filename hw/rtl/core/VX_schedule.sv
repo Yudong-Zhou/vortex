@@ -306,7 +306,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     // schedule the next ready warp
 
-    wire [`NUM_WARPS-1:0] ready_warps = active_warps & ~stalled_warps;
+    wire [`NUM_WARPS-1:0] ready_warps = active_warps & ~stalled_warps & ~warp_ctl_if.dma_warp_stall;
 
     VX_priority_encoder #(
         .N (`NUM_WARPS)

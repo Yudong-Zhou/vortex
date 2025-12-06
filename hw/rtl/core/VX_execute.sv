@@ -43,6 +43,10 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_warp_ctl_if.master   warp_ctl_if,
 
+    VX_dma_bus_if.master    dma_bus_if,
+
+    output wire [`NUM_WARPS-1:0] dma_warp_stall_out,
+
     // commit interface
     VX_commit_csr_if.slave  commit_csr_if
 );
@@ -50,6 +54,8 @@ module VX_execute import VX_gpu_pkg::*; #(
 `ifdef EXT_F_ENABLE
     VX_fpu_csr_if fpu_csr_if[`NUM_FPU_BLOCKS]();
 `endif
+
+    wire [`NUM_WARPS-1:0] dma_warp_stall;
 
     VX_alu_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-alu", INSTANCE_ID)))
@@ -71,7 +77,7 @@ module VX_execute import VX_gpu_pkg::*; #(
         .reset          (reset),
         .dispatch_if    (dispatch_if[EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if      (commit_if[EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
-        .lsu_mem_if     (lsu_mem_if[0])
+        .lsu_mem_if     (lsu_mem_if)
     );
 
 `ifdef EXT_F_ENABLE
@@ -109,13 +115,17 @@ module VX_execute import VX_gpu_pkg::*; #(
     `endif
         .base_dcrs      (base_dcrs),
         .dispatch_if    (dispatch_if[EX_SFU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
-        .commit_if      (commit_if[EX_SFU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
     `ifdef EXT_F_ENABLE
         .fpu_csr_if     (fpu_csr_if),
     `endif
         .commit_csr_if  (commit_csr_if),
         .sched_csr_if   (sched_csr_if),
-        .warp_ctl_if    (warp_ctl_if)
+        .commit_if      (commit_if[EX_SFU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
+        .warp_ctl_if    (warp_ctl_if),
+        .dma_bus_if     (dma_bus_if),
+        .dma_warp_stall (dma_warp_stall)
     );
+
+    assign dma_warp_stall_out = dma_warp_stall;
 
 endmodule

@@ -1,3 +1,4 @@
+
 // Copyright © 2019-2023
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,6 +65,15 @@ module VX_core import VX_gpu_pkg::*; #(
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lsu_mem_if[`NUM_LSU_BLOCKS]();
+
+    // === DMA request bus between SFU(DMA Unit) <-> DMA Engine ===
+    VX_dma_bus_if dma_bus_if_inst();
+
+    // Stub interfaces for DMA engine (unused for now)
+    VX_mem_bus_if #(
+        .DATA_SIZE (LSU_WORD_SIZE),
+        .TAG_WIDTH (LSU_TAG_WIDTH)
+    ) dma_stub_mem_if[2]();
 
 `ifdef PERF_ENABLE
     lmem_perf_t lmem_perf;
@@ -181,7 +191,9 @@ module VX_core import VX_gpu_pkg::*; #(
         .sched_csr_if   (sched_csr_if),
 
         .warp_ctl_if    (warp_ctl_if),
-        .branch_ctl_if  (branch_ctl_if)
+        .branch_ctl_if  (branch_ctl_if),
+        .dma_bus_if     (dma_bus_if_inst),
+        .dma_warp_stall_out(warp_ctl_if.dma_warp_stall)
     );
 
     VX_commit #(
@@ -211,12 +223,9 @@ module VX_core import VX_gpu_pkg::*; #(
         .dcache_bus_if (dcache_bus_if)
     );
 
-    // === DMA request bus between SFU(DMA Unit) <-> DMA Engine ===
-    VX_dma_bus_if dma_bus_if();
-
     // === DMA engine instance ===
     VX_dma_engine #(
-        .INSTANCE_ID(`SFORMATF("%s-dma-eng", INSTANCE_ID)),
+        .INSTANCE_ID(`SFORMATF(("%s-dma-eng", INSTANCE_ID))),
         .NUM_CHANNELS(4),          // 可调
         .QUEUE_SIZE(16),           // 可调
         .BANDWIDTH(64),            // G2L/L2G 64 bytes per cycle
@@ -226,19 +235,19 @@ module VX_core import VX_gpu_pkg::*; #(
         .reset      (reset),
 
         // request from sfu.dma_unit
-        .dma_req_if (dma_bus_if),
+        .dma_req_if (dma_bus_if_inst),
 
         // memory connection
-        .lmem_bus_if(lsu_mem_if[0]),        // -> local memory (shared)
-        .gmem_bus_if(dcache_bus_if[0])      // -> global Dcache/NC
+        .lmem_bus_if(dma_stub_mem_if[0]), 
+        .gmem_bus_if(dma_stub_mem_if[1])
     );
 
     // =============================================================
     //  >>>>>>> forward DMA link into execute stage (critical) <<<<<<
     // =============================================================
 
-assign execute.sfu_unit.dma_bus_if = dma_bus_if;     // DMA 指令通路
-assign warp_ctl_if.dma_warp_stall  = dma_engine.dma_warp_stall;  // stall 反馈 scheduler
+// assign execute.sfu_unit.dma_bus_if = dma_bus_if;     // DMA 指令通路 (Moved to port connection)
+// assign warp_ctl_if.dma_warp_stall  = execute.sfu_unit.dma_unit.warp_stall_mask;  // stall 反馈 scheduler
 
 
 `ifdef PERF_ENABLE

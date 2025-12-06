@@ -115,6 +115,8 @@ package VX_gpu_pkg;
 	localparam EX_SFU = 2;
 	localparam EX_FPU = (EX_SFU + `EXT_F_ENABLED);
     localparam EX_TCU = (EX_FPU + `EXT_TCU_ENABLED);
+
+    localparam NUM_EX_UNITS = EX_TCU + 1;
 	localparam EX_BITS = `CLOG2(NUM_EX_UNITS);
 	localparam EX_WIDTH = `UP(EX_BITS);
 
@@ -459,17 +461,6 @@ package VX_gpu_pkg;
         logic direction;  // 0=G2L, 1=L2G
     } dma_args_t;
 
-    // 添加到 op_args_t union
-    typedef union packed {
-        alu_args_t  alu;
-        fpu_args_t  fpu;
-        lsu_args_t  lsu;
-        csr_args_t  csr;
-        wctl_args_t wctl;
-        dma_args_t  dma;    // 新增
-        // ...
-    } op_args_t;
-
     typedef struct packed {
         logic                    valid;
         logic [`NUM_THREADS-1:0] tmask;
@@ -515,6 +506,18 @@ package VX_gpu_pkg;
     //////////////////////// instruction arguments ////////////////////////////
 
     localparam INST_ARGS_BITS = ALU_TYPE_BITS + `XLEN + 3;
+
+    typedef struct packed {
+        logic [31:0] src_addr;
+        logic [31:0] dst_addr;
+        logic [15:0]           size;
+        logic                  direction;  // 0=G2L, 1=L2G
+        logic [7:0]  tag;        // DMA ID
+    } req_data_t;
+
+    typedef struct packed {
+        logic [7:0] tag;
+    } rsp_data_t;
 
     typedef struct packed {
         logic use_PC;
@@ -565,12 +568,26 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(tcu_args_t) == INST_ARGS_BITS)
 `endif
 
+    /*
+    // 添加到 op_args_t union
     typedef union packed {
         alu_args_t  alu;
         fpu_args_t  fpu;
         lsu_args_t  lsu;
         csr_args_t  csr;
         wctl_args_t wctl;
+        dma_args_t  dma;    // 新增
+        // ...
+    } op_args_t;
+     */
+
+    typedef union packed {
+        alu_args_t  alu;
+        fpu_args_t  fpu;
+        lsu_args_t  lsu;
+        csr_args_t  csr;
+        wctl_args_t wctl;
+        dma_args_t  dma;
     `ifdef EXT_TCU_ENABLE
         tcu_args_t  tcu;
     `endif

@@ -25,6 +25,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
 
     wire [NW_WIDTH-1:0] dvstack_wid;
     wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
+    logic [NW_WIDTH-1:0] dma_warp_stall;
 
     modport master (
         output valid,
@@ -36,7 +37,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output barrier,
 
         output dvstack_wid,
-        input  dvstack_ptr
+        input  dvstack_ptr,
+        input dma_warp_stall
     );
 
     modport slave (
@@ -49,7 +51,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input barrier,
 
         input dvstack_wid,
-        output dvstack_ptr
+        output dvstack_ptr,
+        output dma_warp_stall
     );
 
 endinterface

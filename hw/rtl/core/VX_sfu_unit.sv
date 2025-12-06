@@ -47,6 +47,14 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
+function automatic logic inst_sfu_is_dma(input logic [INST_OP_BITS-1:0] op_type);
+    return (op_type == INST_OP_BITS'(INST_DMA_TRIGGER)
+         || op_type == INST_OP_BITS'(INST_DMA_SET_DST)
+         || op_type == INST_OP_BITS'(INST_DMA_SET_SRC)
+         || op_type == INST_OP_BITS'(INST_DMA_SET_SIZE)
+         || op_type == INST_OP_BITS'(INST_DMA_WAIT));
+endfunction
+
     localparam BLOCK_SIZE   = 1;
     localparam NUM_LANES    = `NUM_SFU_LANES;
 

@@ -255,6 +255,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     end
 
+    /*
     // === DMA Local Memory access path ===
     // 只有 LMEM_ENABLE 时才接入 LocalMem
     `ifdef LMEM_ENABLE
@@ -276,5 +277,6 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         assign dma_lmem_if = dma_lmem_bus_if;
         assign dma_gmem_if = dma_gmem_bus_if;
     `endif
+    */
 
 endmodule
