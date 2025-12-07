@@ -1,7 +1,7 @@
 `include "VX_define.vh"
-import VX_gpu_pkg::*;
 
-interface VX_dma_bus_if ();
+interface VX_dma_bus_if import VX_gpu_pkg::*; ();
+
     // 请求通道
     logic      req_valid;
     req_data_t req_data;

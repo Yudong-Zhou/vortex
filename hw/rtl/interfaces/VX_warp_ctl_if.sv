@@ -25,7 +25,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
 
     wire [NW_WIDTH-1:0] dvstack_wid;
     wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
-    logic [NW_WIDTH-1:0] dma_warp_stall;
+    logic [`NUM_WARPS-1:0] dma_warp_stall;
 
     modport master (
         output valid,
