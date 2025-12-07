@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_dma_engine #(
+module VX_dma_engine import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_CHANNELS    = 4,
     parameter QUEUE_SIZE      = 8,
@@ -80,7 +80,12 @@ module VX_dma_engine #(
         .data_in  (dma_req_if.req_data),
         .data_out (req_q_data),
         .empty    (req_q_empty),
-        .full     (req_q_full)
+        .full     (req_q_full),
+        /* verilator lint_off PINCONNECTEMPTY */
+        .alm_empty(),
+        .alm_full (),
+        .size     ()
+        /* verilator lint_on PINCONNECTEMPTY */
     );
 
     // -------------------------------------------------------------
@@ -100,7 +105,7 @@ module VX_dma_engine #(
     // Completion Queue：收集完成的 DMA tag，返回给 dma_req_if.rsp
     // -------------------------------------------------------------
 
-    logic [RSP_Q_DATAW-1:0] rsp_q_data;
+    logic [RSP_Q_DATAW-1:0] rsp_q_data_in, rsp_q_data_out;
     logic                   rsp_q_empty, rsp_q_full;
     logic                   rsp_q_push, rsp_q_pop;
 
@@ -112,15 +117,20 @@ module VX_dma_engine #(
         .reset    (reset),
         .push     (rsp_q_push),
         .pop      (rsp_q_pop),
-        .data_in  (rsp_q_data),
-        .data_out (rsp_q_data),
+        .data_in  (rsp_q_data_in),
+        .data_out (rsp_q_data_out),
         .empty    (rsp_q_empty),
-        .full     (rsp_q_full)
+        .full     (rsp_q_full),
+        /* verilator lint_off PINCONNECTEMPTY */
+        .alm_empty(),
+        .alm_full (),
+        .size     ()
+        /* verilator lint_on PINCONNECTEMPTY */
     );
 
     // 输出给 dma_req_if.rsp
     assign dma_req_if.rsp_valid       = ~rsp_q_empty;
-    assign dma_req_if.rsp_data.tag    = rsp_q_data[TAG_WIDTH-1:0];
+    assign dma_req_if.rsp_data.tag    = rsp_q_data_out[TAG_WIDTH-1:0];
     assign rsp_q_pop                  = dma_req_if.rsp_valid && dma_req_if.rsp_ready;
 
     // -------------------------------------------------------------
@@ -132,17 +142,20 @@ module VX_dma_engine #(
     logic [$clog2(NUM_CHANNELS)-1:0]    dispatch_ch_id;
 
     integer i;
+    logic [$clog2(NUM_CHANNELS)-1:0] idx;
+
     always @* begin
         dispatch_fire   = 1'b0;
         dispatch_ch_id  = '0;
+        idx             = '0;
 
         if (!req_q_empty) begin
             // 简单 round-robin：从 rr_ptr 开始找第一个空闲 channel
             for (i = 0; i < NUM_CHANNELS; ++i) begin
-                int idx = (rr_ptr + i) % NUM_CHANNELS;
+                idx = $clog2(NUM_CHANNELS)'((32'(rr_ptr) + i) % NUM_CHANNELS);
                 if (ch_state[idx] == CH_IDLE) begin
                     dispatch_fire  = 1'b1;
-                    dispatch_ch_id = idx[$clog2(NUM_CHANNELS)-1:0];
+                    dispatch_ch_id = idx;
                     break;
                 end
             end
@@ -178,7 +191,7 @@ module VX_dma_engine #(
 
     // 完成队列写入条件：有 DONE channel 且队列未满
     assign rsp_q_push = any_done && ~rsp_q_full;
-    assign rsp_q_data = done_rsp_data.tag;
+    assign rsp_q_data_in = done_rsp_data.tag;
 
     // -------------------------------------------------------------
     // Memory 接口（当前版本先占位，后续再接 VX_mem_bus_if 真正读写）
@@ -216,7 +229,7 @@ module VX_dma_engine #(
             // 1) 分发：Request Queue -> 空闲 Channel
             // -----------------------------
             if (dispatch_fire) begin
-                int cid = dispatch_ch_id;
+                int cid = 32'(dispatch_ch_id);
                 // 将当前队列头的请求塞给该 channel
                 ch_info[cid].src_addr   <= req_q_data.src_addr;
                 ch_info[cid].dst_addr   <= req_q_data.dst_addr;
@@ -228,7 +241,7 @@ module VX_dma_engine #(
                 ch_state[cid]           <= CH_STARTUP;
 
                 // 更新 round-robin 指针
-                rr_ptr <= (cid + 1) % NUM_CHANNELS;
+                rr_ptr <= $clog2(NUM_CHANNELS)'((cid + 1) % NUM_CHANNELS);
             end
 
             // -----------------------------

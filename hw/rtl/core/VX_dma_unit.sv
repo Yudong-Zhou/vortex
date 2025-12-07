@@ -31,7 +31,7 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
                           + NW_WIDTH              // wid
                           + NUM_LANES             // tmask
                           + PC_BITS
-                          + 5              // rd
+                          + 6                     // rd
                           + 1                     // wb
                           + NUM_LANES * `XLEN     // data
                           + PID_WIDTH             // pid
@@ -54,7 +54,7 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
     `UNUSED_VAR (execute_if.data.rs2_data)
     `UNUSED_VAR (execute_if.data.rs3_data)
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_rs1_data
         assign rs1_data[i] = execute_if.data.rs1_data[i];
     end
 
@@ -77,6 +77,7 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
 
     // 仅 lane0 作为 scalar 寄存器操作数
     wire [`XLEN-1:0] rs1_scalar = rs1_data[0];
+    `UNUSED_VAR (rs1_data)
 
     // DMA 方向
     wire dma_dir_to_lmem = (execute_if.data.op_args.dma.direction == 1'b1);
@@ -108,12 +109,17 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
     // ====== 内部请求握手（execute ↔ dma_unit ↔ result_if） ======
 
     wire dma_req_valid = execute_if.valid && is_dma_inst;
-    wire dma_req_ready;
+    wire dma_req_ready; // from rsp_buf
 
-    wire dma_fire = dma_req_valid && dma_req_ready;
+    // 必须同时满足：
+    // 1. 后端结果 buffer (rsp_buf) 有空间
+    // 2. 如果是 TRIGGER 指令，DMA 引擎的请求队列 (dma_bus_if) 必须 ready
+    wire dma_backend_ready = dma_req_ready && (!is_dma_trigger || dma_bus_if.req_ready);
+
+    wire dma_fire = dma_req_valid && dma_backend_ready;
 
     // 外部 execute_if ready
-    assign execute_if.ready = dma_req_ready;
+    assign execute_if.ready = dma_backend_ready;
 
     // ====== 写回数据（给 result_if.data.data） ======
 
@@ -132,13 +138,17 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
 
     // ====== 与 result_if 之间的 elastic buffer ======
 
+    // 只有当 DMA 引擎准备好（或者不是 TRIGGER 指令）时，才允许将结果推入 rsp_buf
+    // 这样保证了原子性：要么同时成功（发请求+写结果），要么都 stall
+    wire rsp_buf_push = dma_req_valid && (!is_dma_trigger || dma_bus_if.req_ready);
+
     VX_elastic_buffer #(
         .DATAW (DATAW),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (dma_req_valid),
+        .valid_in  (rsp_buf_push),
         .ready_in  (dma_req_ready),
         .data_in   ({
             execute_if.data.uuid,
@@ -184,8 +194,10 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
     wire dma_set_size_fire = dma_fire && is_dma_set_size;
     wire dma_wait_fire     = dma_fire && is_dma_wait;
 
-    // req_valid 直接由 trigger_fire 驱动（这假设 dma_bus_if.req_ready 始终为 1）
-    assign dma_bus_if.req_valid               = dma_trigger_fire;
+    // req_valid 直接由 trigger_fire 驱动
+    // 注意：由于上面 dma_fire 已经包含了 dma_bus_if.req_ready 的检查，
+    // 所以这里 valid 拉高时，ready 一定是高的（除非组合逻辑环，但这里是 valid->ready 依赖，应该没问题）
+    assign dma_bus_if.req_valid               = dma_req_valid && is_dma_trigger && dma_req_ready;
     assign dma_bus_if.req_data.src_addr       = warp_src_addr[wid];
     assign dma_bus_if.req_data.dst_addr       = warp_dst_addr[wid];
     assign dma_bus_if.req_data.size           = warp_size[wid];
