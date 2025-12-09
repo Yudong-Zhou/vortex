@@ -44,7 +44,7 @@
 
 package local_mem_cfg_pkg;
 
-    parameter LOCAL_MEM_VERSION_NUMBER = 1;
+    // parameter LOCAL_MEM_VERSION_NUMBER = 1;
 
     parameter LOCAL_MEM_ADDR_WIDTH = `PLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH;
     parameter LOCAL_MEM_DATA_WIDTH = `PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH;

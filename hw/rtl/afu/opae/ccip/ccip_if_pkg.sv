@@ -5,7 +5,7 @@ package ccip_if_pkg;
 //=====================================================================
 // CCI-P interface defines
 //=====================================================================
-parameter CCIP_VERSION_NUMBER    = 12'h071;
+// parameter CCIP_VERSION_NUMBER    = 12'h071;
 
 parameter CCIP_CLADDR_WIDTH      = 42; 
 parameter CCIP_CLDATA_WIDTH      = 512; 
@@ -18,11 +18,11 @@ parameter CCIP_MDATA_WIDTH       = 16;
 
 
 // Number of requests that can be accepted after almost full is asserted. 
-parameter CCIP_TX_ALMOST_FULL_THRESHOLD = 8; 
+// parameter CCIP_TX_ALMOST_FULL_THRESHOLD = 8; 
 
-parameter CCIP_MMIO_RD_TIMEOUT = 512;
+// parameter CCIP_MMIO_RD_TIMEOUT = 512;
 
-parameter CCIP_SYNC_RESET_POLARITY=1;       // Active High Reset
+// parameter CCIP_SYNC_RESET_POLARITY=1;       // Active High Reset
 
 // Base types 
 //---------------------------------------------------------------------- 
@@ -104,7 +104,7 @@ typedef struct packed {
     t_ccip_clAddr   address;
     t_ccip_mdata    mdata;
 } t_ccip_c0_ReqMemHdr;
-parameter CCIP_C0TX_HDR_WIDTH = $bits(t_ccip_c0_ReqMemHdr);
+// parameter CCIP_C0TX_HDR_WIDTH = $bits(t_ccip_c0_ReqMemHdr);
 
 typedef struct packed {
     logic [5:0]     rsvd2;
@@ -117,7 +117,7 @@ typedef struct packed {
     t_ccip_clAddr   address;
     t_ccip_mdata    mdata;
 } t_ccip_c1_ReqMemHdr;
-parameter CCIP_C1TX_HDR_WIDTH = $bits(t_ccip_c1_ReqMemHdr);
+// parameter CCIP_C1TX_HDR_WIDTH = $bits(t_ccip_c1_ReqMemHdr);
 
 typedef struct packed {
     logic [5:0]     rsvd2;          // reserved, drive 0
@@ -137,7 +137,7 @@ typedef struct packed {
     t_ccip_c0_rsp   resp_type;
     t_ccip_mdata    mdata;
 } t_ccip_c0_RspMemHdr;
-parameter CCIP_C0RX_HDR_WIDTH = $bits(t_ccip_c0_RspMemHdr);
+// parameter CCIP_C0RX_HDR_WIDTH = $bits(t_ccip_c0_RspMemHdr);
 
 typedef struct packed {
     t_ccip_vc       vc_used;
@@ -149,7 +149,7 @@ typedef struct packed {
     t_ccip_c1_rsp   resp_type;
     t_ccip_mdata    mdata;
 } t_ccip_c1_RspMemHdr;
-parameter CCIP_C1RX_HDR_WIDTH = $bits(t_ccip_c1_RspMemHdr);
+// parameter CCIP_C1RX_HDR_WIDTH = $bits(t_ccip_c1_RspMemHdr);
 
 typedef struct packed {
     logic [7:0]     rsvd0;          // reserved, don't care
@@ -172,7 +172,7 @@ typedef struct packed {
 typedef struct packed {
     t_ccip_tid     tid;         // Returned back from ReqMmioHdr
 } t_ccip_c2_RspMmioHdr;
-parameter CCIP_C2TX_HDR_WIDTH = $bits(t_ccip_c2_RspMmioHdr);
+// parameter CCIP_C2TX_HDR_WIDTH = $bits(t_ccip_c2_RspMmioHdr);
 
 //------------------------------------------------------------------------
 // CCI-P Input & Output bus structures 
