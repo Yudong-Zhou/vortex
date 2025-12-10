@@ -28,6 +28,8 @@ module VX_dma_engine import VX_gpu_pkg::*; #(
     typedef req_data_t  dma_req_t;
     typedef rsp_data_t  dma_rsp_t;
 
+
+
     localparam ADDR_WIDTH = 32;
     localparam SIZE_WIDTH = 16;
     localparam TAG_WIDTH  = 8;
@@ -37,6 +39,9 @@ module VX_dma_engine import VX_gpu_pkg::*; #(
 
     // 完成队列只需要 tag
     localparam RSP_Q_DATAW = TAG_WIDTH;
+
+    `UNUSED_PARAM (REQ_Q_DATAW)
+    `UNUSED_PARAM (RSP_Q_DATAW)
 
     // Channel FSM 状态
     typedef enum logic [1:0] {
@@ -55,13 +60,22 @@ module VX_dma_engine import VX_gpu_pkg::*; #(
         logic [TAG_WIDTH-1:0]  tag;
     } ch_req_info_t;
 
+
+
     // -------------------------------------------------------------
-    // Request Queue：接收来自 VX_dma_unit 的请求
+    // Request Queue (Manual Implementation)
     // -------------------------------------------------------------
+    dma_req_t  req_q_mem [QUEUE_SIZE];
+    logic [$clog2(QUEUE_SIZE)-1:0] req_wr_ptr = '0, req_rd_ptr = '0;
+    logic [$clog2(QUEUE_SIZE):0]   req_count = '0;
 
     dma_req_t  req_q_data;
     logic      req_q_empty, req_q_full;
     logic      req_q_push, req_q_pop;
+
+    assign req_q_full  = (req_count == QUEUE_SIZE[$clog2(QUEUE_SIZE):0]);
+    assign req_q_empty = (req_count == '0);
+    assign req_q_data  = req_q_mem[req_rd_ptr];
 
     // dma_req_if.req_ready 由队列满信号驱动
     assign dma_req_if.req_ready = ~req_q_full;
@@ -69,69 +83,93 @@ module VX_dma_engine import VX_gpu_pkg::*; #(
     // 入队：上游 valid & ready
     assign req_q_push = dma_req_if.req_valid && dma_req_if.req_ready;
 
-    VX_fifo_queue #(
-        .DATAW (REQ_Q_DATAW),
-        .DEPTH (QUEUE_SIZE)
-    ) req_queue (
-        .clk      (clk),
-        .reset    (reset),
-        .push     (req_q_push),
-        .pop      (req_q_pop),
-        .data_in  (dma_req_if.req_data),
-        .data_out (req_q_data),
-        .empty    (req_q_empty),
-        .full     (req_q_full),
-        /* verilator lint_off PINCONNECTEMPTY */
-        .alm_empty(),
-        .alm_full (),
-        .size     ()
-        /* verilator lint_on PINCONNECTEMPTY */
-    );
+    always @(posedge clk) begin
+        if (reset) begin
+            req_wr_ptr <= '0;
+            req_rd_ptr <= '0;
+            req_count  <= '0;
+        end else begin
+            if (req_q_push) begin
+                //$display("[%t] [DMA_ENGINE] PUSH REQ: src=%h dst=%h size=%h tag=%h", $time, dma_req_if.req_data.src_addr, dma_req_if.req_data.dst_addr, dma_req_if.req_data.size, dma_req_if.req_data.tag);
+                req_q_mem[req_wr_ptr] <= dma_req_if.req_data;
+                if (req_wr_ptr == $clog2(QUEUE_SIZE)'(QUEUE_SIZE-1))
+                    req_wr_ptr <= '0;
+                else
+                    req_wr_ptr <= req_wr_ptr + 1'b1;
+            end
+            if (req_q_pop) begin
+                if (req_rd_ptr == $clog2(QUEUE_SIZE)'(QUEUE_SIZE-1))
+                    req_rd_ptr <= '0;
+                else
+                    req_rd_ptr <= req_rd_ptr + 1'b1;
+            end
+            
+            case ({req_q_push, req_q_pop})
+                2'b10: req_count <= req_count + 1'b1;
+                2'b01: req_count <= req_count - 1'b1;
+                default: ;
+            endcase
+        end
+    end
 
     // -------------------------------------------------------------
     // 多 Channel 状态机
     // -------------------------------------------------------------
 
     // 每个 channel 的状态/计数器/请求信息
-    ch_state_e             ch_state     [NUM_CHANNELS];
+    ch_state_e             ch_state     [NUM_CHANNELS] = '{default: CH_IDLE};
     ch_req_info_t          ch_info      [NUM_CHANNELS];
     logic [SIZE_WIDTH-1:0] ch_bytes_rem [NUM_CHANNELS];
     logic [15:0]           ch_startup_cnt [NUM_CHANNELS];
 
     // Round-robin 分发用指针
-    logic [$clog2(NUM_CHANNELS)-1:0] rr_ptr;
+    logic [$clog2(NUM_CHANNELS)-1:0] rr_ptr = '0;
 
     // -------------------------------------------------------------
-    // Completion Queue：收集完成的 DMA tag，返回给 dma_req_if.rsp
+    // Completion Queue (Manual Implementation)
     // -------------------------------------------------------------
+    logic [RSP_Q_DATAW-1:0] rsp_q_mem [QUEUE_SIZE];
+    logic [$clog2(QUEUE_SIZE)-1:0] rsp_wr_ptr = '0, rsp_rd_ptr = '0;
+    logic [$clog2(QUEUE_SIZE):0]   rsp_count = '0;
 
-    logic [RSP_Q_DATAW-1:0] rsp_q_data_in, rsp_q_data_out;
+    logic [RSP_Q_DATAW-1:0] rsp_q_data_in;
     logic                   rsp_q_empty, rsp_q_full;
     logic                   rsp_q_push, rsp_q_pop;
 
-    VX_fifo_queue #(
-        .DATAW (RSP_Q_DATAW),
-        .DEPTH (QUEUE_SIZE)
-    ) rsp_queue (
-        .clk      (clk),
-        .reset    (reset),
-        .push     (rsp_q_push),
-        .pop      (rsp_q_pop),
-        .data_in  (rsp_q_data_in),
-        .data_out (rsp_q_data_out),
-        .empty    (rsp_q_empty),
-        .full     (rsp_q_full),
-        /* verilator lint_off PINCONNECTEMPTY */
-        .alm_empty(),
-        .alm_full (),
-        .size     ()
-        /* verilator lint_on PINCONNECTEMPTY */
-    );
+    assign rsp_q_full  = (rsp_count == QUEUE_SIZE[$clog2(QUEUE_SIZE):0]);
+    assign rsp_q_empty = (rsp_count == '0);
+    
+    assign dma_req_if.rsp_valid    = ~rsp_q_empty;
+    assign dma_req_if.rsp_data.tag = rsp_q_mem[rsp_rd_ptr][TAG_WIDTH-1:0];
+    assign rsp_q_pop               = dma_req_if.rsp_valid && dma_req_if.rsp_ready;
 
-    // 输出给 dma_req_if.rsp
-    assign dma_req_if.rsp_valid       = ~rsp_q_empty;
-    assign dma_req_if.rsp_data.tag    = rsp_q_data_out[TAG_WIDTH-1:0];
-    assign rsp_q_pop                  = dma_req_if.rsp_valid && dma_req_if.rsp_ready;
+    always @(posedge clk) begin
+        if (reset) begin
+            rsp_wr_ptr <= '0;
+            rsp_rd_ptr <= '0;
+            rsp_count  <= '0;
+        end else begin
+            if (rsp_q_push) begin
+                rsp_q_mem[rsp_wr_ptr] <= rsp_q_data_in;
+                if (rsp_wr_ptr == $clog2(QUEUE_SIZE)'(QUEUE_SIZE-1))
+                    rsp_wr_ptr <= '0;
+                else
+                    rsp_wr_ptr <= rsp_wr_ptr + 1'b1;
+            end
+            if (rsp_q_pop) begin
+                if (rsp_rd_ptr == $clog2(QUEUE_SIZE)'(QUEUE_SIZE-1))
+                    rsp_rd_ptr <= '0;
+                else
+                    rsp_rd_ptr <= rsp_rd_ptr + 1'b1;
+            end
+
+            case ({rsp_q_push, rsp_q_pop})
+                2'b10: rsp_count <= rsp_count + 1'b1;
+                2'b01: rsp_count <= rsp_count - 1'b1;
+                default: ; 
+            endcase
+        end
+    end
 
     // -------------------------------------------------------------
     // Channel Dispatcher：从 Request Queue 分发请求到空闲 Channel

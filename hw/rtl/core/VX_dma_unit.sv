@@ -95,6 +95,13 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
     reg                    warp_waiting    [NUM_WARPS];
     reg [DMA_ID_WIDTH-1:0] warp_wait_id    [NUM_WARPS];
 
+    initial begin
+        for (int k = 0; k < NUM_WARPS; ++k) begin
+            warp_pending[k] = 1'b0;
+            warp_waiting[k] = 1'b0;
+        end
+    end
+
     // Warp stall mask: 当前 warp 正在等待且对应 DMA 仍 pending
     reg [`NUM_WARPS-1:0] warp_stall_r;
     assign warp_stall_mask = warp_stall_r;
@@ -210,10 +217,13 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
     // ====== 主时序逻辑 ======
 
     integer w;
+    reg ready_seen;
 
     always @(posedge clk) begin
         if (reset) begin
             next_dma_id   <= '0;
+            ready_seen    <= 1'b0;
+            // reset_seen    <= 1'b1; // Moved to separate block
 
             for (w = 0; w < NUM_WARPS; ++w) begin
                 warp_dst_addr[w] <= '0;
@@ -228,6 +238,16 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
             warp_stall_r <= '0;
         end else begin
             // ==== 配置寄存器更新 ====
+
+            if (!ready_seen && dma_bus_if.req_ready) begin
+                $display("[%t] [DMA_UNIT] DEBUG: Engine is READY (req_ready=1)", $time);
+                ready_seen <= 1'b1;
+            end
+
+            if (dma_req_valid && !dma_backend_ready) begin
+                if (is_dma_trigger)
+                    $display("[%t] [DMA_UNIT] STALL: Engine_Ready=%b RspBuf_Ready=%b", $time, dma_bus_if.req_ready, dma_req_ready);
+            end
 
             if (dma_set_dst_fire) begin
                 warp_dst_addr[wid] <= rs1_scalar[ADDR_WIDTH-1:0];
@@ -244,6 +264,7 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
             // ==== TRIGGER：分配 DMA ID + 标记 pending + 发请求 ====
 
             if (dma_trigger_fire) begin
+                //$display("[%t] [DMA_UNIT] TRIGGER: wid=%0d tag=%h", $time, wid, curr_dma_id);
                 // 当前指令使用 curr_dma_id
                 warp_dma_id[wid]  <= curr_dma_id;
                 warp_pending[wid] <= 1'b1;
@@ -266,13 +287,12 @@ module VX_dma_unit import VX_gpu_pkg::*; #(
             // ==== 从 VX_dma_engine 接收完成通知 ====
 
             if (dma_bus_if.rsp_valid && dma_bus_if.rsp_ready) begin
-                dma_rsp_t rsp = dma_bus_if.rsp_data;
                 // 简单起见：假设每个 dma_id 只对应一个 warp（由 dma_unit 分配器保证）
                 for (w = 0; w < NUM_WARPS; ++w) begin
-                    if (warp_pending[w] && (warp_dma_id[w] == rsp.tag)) begin
+                    if (warp_pending[w] && (warp_dma_id[w] == dma_bus_if.rsp_data.tag)) begin
                         warp_pending[w] <= 1'b0;
                         // 如果某个 warp 正在等待这个 id，则清除 waiting
-                        if (warp_waiting[w] && (warp_wait_id[w] == rsp.tag)) begin
+                        if (warp_waiting[w] && (warp_wait_id[w] == dma_bus_if.rsp_data.tag)) begin
                             warp_waiting[w] <= 1'b0;
                         end
                     end
