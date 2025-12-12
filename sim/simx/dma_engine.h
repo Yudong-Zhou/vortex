@@ -38,11 +38,11 @@ public:
         uint64_t total_latency;     // 总延迟
         uint64_t queue_stalls;      // 队列满的周期数
         uint64_t wait_stalls;       // wait指令等待的周期数
-        
+
         PerfStats() 
             : transfers(0), bytes_read(0), bytes_written(0)
             , total_latency(0), queue_stalls(0), wait_stalls(0) {}
-        
+
         PerfStats& operator+=(const PerfStats& other) {
             transfers += other.transfers;
             bytes_read += other.bytes_read;
@@ -53,7 +53,7 @@ public:
             return *this;
         }
     };
-    
+
     // DMA传输状态
     enum class DmaState {
         IDLE,

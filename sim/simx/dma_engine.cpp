@@ -182,7 +182,7 @@ void DmaEngine::process_transfer(DmaRequest* transfer, uint32_t channel_idx) {
         
         if (transfer_size > 0) {
             std::vector<uint8_t> buffer(transfer_size);
-            
+    
             if (transfer->direction == 0) {
                 // G2L: Global to Local
                 ram_->read(buffer.data(), 
@@ -229,7 +229,7 @@ void DmaEngine::complete_transfer(uint32_t channel_idx) {
     assert(transfer != nullptr);
     
     uint64_t latency = SimPlatform::instance().cycles() - transfer->start_cycle;
-    
+        
     DT(3, this->name() << ": DMA " << transfer->dma_id 
         << " (ch" << channel_idx << ") completed, latency=" << latency << " cycles");
     

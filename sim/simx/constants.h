@@ -62,7 +62,7 @@ inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);
 #endif
 
 #ifndef DMA_STARTUP_LATENCY
-#define DMA_STARTUP_LATENCY 2   // cycles (reduced for faster small transfers)
+#define DMA_STARTUP_LATENCY 10   // cycles (lower for faster small transfers)
 #endif
 
 } // namespace vortex
